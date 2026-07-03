@@ -99,7 +99,9 @@ export function Library({ onOpenBook, onClose }: LibraryProps) {
           <Shelf title="Continue reading" books={inProgress} onOpenBook={onOpenBook} />
           <Shelf title="On deck" books={onDeck} onOpenBook={onOpenBook} />
           <ul>
-            {series === null && !error && <li className="muted">Loading series…</li>}
+            {series === null &&
+              !error &&
+              [0, 1, 2, 3, 4, 5].map((i) => <li key={i} className="skel" />)}
             {series?.map((s) => (
               <li key={s.id}>
                 <button className="row" onClick={() => setSelected(s)}>
@@ -124,7 +126,9 @@ export function Library({ onOpenBook, onClose }: LibraryProps) {
 
       {selected && (
         <ul>
-          {books === null && !error && <li className="muted">Loading books…</li>}
+          {books === null &&
+            !error &&
+            [0, 1, 2, 3, 4, 5].map((i) => <li key={i} className="skel" />)}
           {books?.map((b) => (
             <li key={b.id}>
               <button className="row" onClick={() => onOpenBook(b)}>

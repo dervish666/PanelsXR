@@ -118,9 +118,28 @@ export function PageSurface({ urls, indices }: PageSurfaceProps) {
   const totalWidth =
     pages.reduce((sum, p) => sum + p.width, 0) + SPREAD_GAP * (pages.length - 1)
 
+  // Physical presence: a paper stack + backing board behind the page. In VR
+  // this is real geometry, so stereo + head tracking give genuine depth — the
+  // comic reads as an object, not a floating poster.
+  const stack = [
+    { z: -0.006, s: 0.995, rot: 0.004, color: '#d9d2c3' },
+    { z: -0.012, s: 0.988, rot: -0.007, color: '#c8c1b1' },
+    { z: -0.018, s: 0.98, rot: 0.01, color: '#b5ae9f' },
+  ]
+
   let x = -totalWidth / 2
   return (
     <group>
+      {stack.map((l) => (
+        <mesh key={l.z} position={[0, 0, l.z]} rotation={[0, 0, l.rot]} scale={l.s}>
+          <planeGeometry args={[totalWidth, PAGE_HEIGHT]} />
+          <meshBasicMaterial color={l.color} toneMapped={false} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0, -0.03]}>
+        <planeGeometry args={[totalWidth + 0.06, PAGE_HEIGHT + 0.06]} />
+        <meshBasicMaterial color="#1a1411" toneMapped={false} />
+      </mesh>
       {pages.map((p) => {
         const cx = x + p.width / 2
         x += p.width + SPREAD_GAP

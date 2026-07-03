@@ -129,7 +129,7 @@ export function App() {
     <>
       <div className="overlay">
         <div className="brand">
-          Panel <span>· v0</span>
+          PANEL <span>Komga → WebXR</span>
         </div>
         <div className="controls">
           <button onClick={() => prev()} disabled={index === 0}>
@@ -167,12 +167,15 @@ export function App() {
             Enter VR
           </button>
         </div>
-        {book && <div className="hint">Reading: {book.name}</div>}
+        {book && (
+          <div className="reading">
+            Reading <b>{book.seriesTitle}</b> — {book.name}
+          </div>
+        )}
         {error && <div className="error">{error}</div>}
         <div className="hint">
-          Turn pages: right stick / arrows · VR: hold the trigger to grab &amp; move the
-          page (both triggers to resize), left stick to walk, X to recenter · Desktop:
-          drag to look
+          Turn: right stick / ← → · Grab: trigger (two to resize) · Walk: left stick ·
+          X recenters
         </div>
       </div>
 
