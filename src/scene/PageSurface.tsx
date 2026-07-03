@@ -33,35 +33,64 @@ function loadTexture(url: string): Promise<THREE.Texture> {
 
 export interface PageAmbience {
   color: THREE.Color // darkened dominant colour of the current page
-  texture: THREE.CanvasTexture // tiny blurry copy for the backdrop plane
 }
 
-// Downsample the page to a tiny canvas: linear upscaling makes it a free blur,
-// and averaging its pixels gives the dominant colour for the room tint.
+// Dominant CHROMATIC colour, not the mean: comic pages are mostly white paper
+// and black ink, so a plain average is always murky grey-brown. Instead we
+// downsample, discard paper/ink/near-grey pixels, bucket the rest by hue
+// (weighted by saturation), and take the winning bucket's average — a red-wash
+// page reads as red. The result is pinned to a fixed dark-but-saturated level
+// so the room visibly shifts page to page while staying headset-dim.
 function makeAmbience(img: HTMLImageElement): PageAmbience {
   const c = document.createElement('canvas')
-  c.width = 20
-  c.height = 28
+  c.width = 32
+  c.height = 44
   const ctx = c.getContext('2d')!
   ctx.drawImage(img, 0, 0, c.width, c.height)
   const data = ctx.getImageData(0, 0, c.width, c.height).data
-  let r = 0
-  let g = 0
-  let b = 0
+
+  const BUCKETS = 12
+  const wSum = new Array(BUCKETS).fill(0)
+  const rSum = new Array(BUCKETS).fill(0)
+  const gSum = new Array(BUCKETS).fill(0)
+  const bSum = new Array(BUCKETS).fill(0)
+  let meanR = 0
+  let meanG = 0
+  let meanB = 0
   const n = data.length / 4
+  const hsl = { h: 0, s: 0, l: 0 }
+  const px = new THREE.Color()
+
   for (let i = 0; i < data.length; i += 4) {
-    r += data[i]
-    g += data[i + 1]
-    b += data[i + 2]
+    const r = data[i] / 255
+    const g = data[i + 1] / 255
+    const b = data[i + 2] / 255
+    meanR += r
+    meanG += g
+    meanB += b
+    px.setRGB(r, g, b).getHSL(hsl)
+    // skip paper (bright), ink (dark) and near-greys — they aren't "the colour"
+    if (hsl.l > 0.88 || hsl.l < 0.07 || hsl.s < 0.18) continue
+    const k = Math.min(BUCKETS - 1, Math.floor(hsl.h * BUCKETS))
+    const w = hsl.s * (1 - Math.abs(hsl.l - 0.5)) // saturated mid-tones count most
+    wSum[k] += w
+    rSum[k] += r * w
+    gSum[k] += g * w
+    bSum[k] += b * w
   }
-  // Darken hard: the surround must stay dim in-headset (see PRODUCT.md).
-  const color = new THREE.Color(r / n / 255, g / n / 255, b / n / 255).multiplyScalar(0.16)
-  const texture = new THREE.CanvasTexture(c)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.minFilter = THREE.LinearFilter
-  texture.magFilter = THREE.LinearFilter
-  texture.generateMipmaps = false
-  return { color, texture }
+
+  const best = wSum.indexOf(Math.max(...wSum))
+  const color = new THREE.Color()
+  if (wSum[best] > 1.5) {
+    color.setRGB(rSum[best] / wSum[best], gSum[best] / wSum[best], bSum[best] / wSum[best])
+    // pin to a consistent dark-saturated level so the shift is visible
+    color.getHSL(hsl)
+    color.setHSL(hsl.h, Math.min(hsl.s * 1.4, 0.8), 0.11)
+  } else {
+    // effectively monochrome page: fall back to a very dim mean
+    color.setRGB(meanR / n, meanG / n, meanB / n).multiplyScalar(0.14)
+  }
+  return { color }
 }
 
 export interface PageSurfaceProps {
