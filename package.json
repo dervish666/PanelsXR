@@ -1,0 +1,33 @@
+{
+  "name": "panels-xr",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Panel — a WebXR comic reader that streams a Komga library into a VR headset.",
+  "scripts": {
+    "dev": "vite --host",
+    "dev:quest": "HTTPS=true vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@react-three/handle": "^6.6.30",
+    "@react-three/xr": "^6.6.30",
+    "jszip": "^3.10.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.185.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3"
+  }
+}
