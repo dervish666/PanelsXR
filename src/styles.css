@@ -43,3 +43,53 @@ canvas { display: block; touch-action: none; }
 .counter { font-variant-numeric: tabular-nums; min-width: 64px; text-align: center; opacity: 0.85; }
 .hint { font-size: 12px; opacity: 0.5; }
 .error { color: #ff8080; font-size: 13px; }
+
+/* Komga library browser */
+.library {
+  position: fixed;
+  top: 110px;
+  left: 18px;
+  z-index: 20;
+  width: min(440px, calc(100vw - 36px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  background: #16161d;
+  border: 1px solid #33333f;
+  border-radius: 12px;
+  padding: 12px;
+}
+.library-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.library-title { font-weight: 700; }
+.library-sub { flex: 1; opacity: 0.7; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-head button {
+  background: #1e1e28;
+  color: #e8e8ea;
+  border: 1px solid #33333f;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.library ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.library .row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  color: #e8e8ea;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.library .row:hover { background: #22222c; }
+.library .muted { opacity: 0.5; font-size: 12px; white-space: nowrap; }

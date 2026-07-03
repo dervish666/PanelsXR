@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useThree } from '@react-three/fiber'
+import { XRLayer, useXR } from '@react-three/xr'
 import * as THREE from 'three'
 
 // Keep the current page plus this many neighbours resident; dispose the rest.
@@ -101,10 +102,28 @@ export function PageSurface({ urls, index }: PageSurfaceProps) {
     }
   }, [])
 
+  const inSession = useXR((s) => s.session != null)
   const img = current?.image as HTMLImageElement | undefined
   const aspect = img && img.width ? img.width / img.height : 2 / 3
   const height = 1.5
   const width = height * aspect
+
+  // In an XR session, composite the page via a WebXR quad layer: the compositor
+  // samples the image at native resolution instead of through the eye buffer
+  // (the double-resample that makes VR text mushy). Keyed on the image so the
+  // layer is recreated per page. Falls back to a plain mesh automatically in
+  // sessions without layer support.
+  if (inSession && img) {
+    return (
+      <XRLayer
+        key={current!.uuid}
+        shape="quad"
+        quality="text-optimized"
+        src={img}
+        scale={[width, height, 1]}
+      />
+    )
+  }
 
   // Positioned at local origin; the parent group (in Reader) places it in the
   // room and, in VR, is the grab target.
