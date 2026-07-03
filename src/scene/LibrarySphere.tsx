@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
-import { useXR } from '@react-three/xr'
+import { useXR, useXRInputSourceState } from '@react-three/xr'
 import * as THREE from 'three'
 import { UIButton } from './UIButton'
+import { exitVR } from '../xr/store'
 import {
   bookThumbUrl,
   firstUnreadBook,
@@ -218,9 +219,30 @@ export interface LibrarySphereProps {
 
 // The in-VR library: covers fly up and surround you; point at one to grow it
 // and read its title; select to open. Shelf books first, then series covers.
+function azimuthOf(p: THREE.Vector3): number {
+  return Math.atan2(p.x, -p.z)
+}
+
 export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   const [items, setItems] = useState<SphereItem[] | null>(null)
   const inXR = useXR((s) => s.session != null)
+  const rotGroup = useRef<THREE.Group>(null)
+  // drag-to-spin state: track the pointer's azimuth and how far it has pulled,
+  // so a real pull spins the sphere and a stationary press still counts as a click
+  const drag = useRef<{ az: number; moved: number } | null>(null)
+  const suppressClick = useRef(false)
+  const right = useXRInputSourceState('controller', 'right')
+
+  useFrame((_, dt) => {
+    // right thumbstick spins the library — the easy seated option
+    const stick = right?.gamepad?.['xr-standard-thumbstick'] as
+      | { xAxis?: number }
+      | undefined
+    const x = stick?.xAxis ?? 0
+    if (Math.abs(x) > 0.2 && rotGroup.current) {
+      rotGroup.current.rotation.y -= x * dt * 1.6
+    }
+  })
 
   useEffect(() => {
     let dead = false
@@ -271,6 +293,7 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   )
 
   const pick = (item: SphereItem) => {
+    if (suppressClick.current) return // that "click" was the tail end of a pull
     void item.resolve().then((b) => {
       if (b) onOpenBook(b)
     })
@@ -279,24 +302,72 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   if (!items) return null
   return (
     <group>
-      {items.map((item, i) => (
-        <Cover
-          key={item.key}
-          item={item}
-          target={targets[i]}
-          delay={i * STAGGER_MS}
-          onPick={pick}
-        />
-      ))}
+      {/* the rotating shell: click-and-pull any cover sideways to spin it
+          (VR only — desktop already orbits with the mouse) */}
+      <group
+        ref={rotGroup}
+        onPointerDown={
+          inXR
+            ? (e) => {
+                drag.current = { az: azimuthOf(e.point), moved: 0 }
+                suppressClick.current = false
+              }
+            : undefined
+        }
+        onPointerMove={
+          inXR
+            ? (e) => {
+                const d = drag.current
+                const g = rotGroup.current
+                if (!d || !g) return
+                const az = azimuthOf(e.point)
+                let delta = az - d.az
+                if (delta > Math.PI) delta -= Math.PI * 2
+                if (delta < -Math.PI) delta += Math.PI * 2
+                g.rotation.y += delta
+                d.az = az
+                d.moved += Math.abs(delta)
+                if (d.moved > 0.05) suppressClick.current = true
+              }
+            : undefined
+        }
+        onPointerUp={
+          inXR
+            ? () => {
+                drag.current = null
+                // let the click that ends this gesture see the flag, then clear
+                setTimeout(() => (suppressClick.current = false), 80)
+              }
+            : undefined
+        }
+      >
+        {items.map((item, i) => (
+          <Cover
+            key={item.key}
+            item={item}
+            target={targets[i]}
+            delay={i * STAGGER_MS}
+            onPick={pick}
+          />
+        ))}
+      </group>
       {/* In VR: a close button floating low in front (Y also toggles).
           On desktop: orbit so the mouse can look around the band. */}
       {inXR && onClose && (
-        <UIButton
-          position={[0, HEAD - 0.85, -1.2]}
-          width={0.42}
-          label="✕ Back to book"
-          onClick={onClose}
-        />
+        <>
+          <UIButton
+            position={[-0.24, HEAD - 0.85, -1.2]}
+            width={0.42}
+            label="✕ Back to book"
+            onClick={onClose}
+          />
+          <UIButton
+            position={[0.2, HEAD - 0.85, -1.2]}
+            width={0.3}
+            label="Exit VR"
+            onClick={exitVR}
+          />
+        </>
       )}
       {!inXR && (
         <OrbitControls target={[0, HEAD, -0.01]} enablePan={false} enableZoom={false} />

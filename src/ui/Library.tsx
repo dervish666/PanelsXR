@@ -62,6 +62,10 @@ export function Library({ onOpenBook, onClose }: LibraryProps) {
   const [selected, setSelected] = useState<KomgaSeries | null>(null)
   const [books, setBooks] = useState<KomgaBook[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+
+  const q = query.trim().toLowerCase()
+  const shownSeries = q ? series?.filter((s) => s.name.toLowerCase().includes(q)) : series
 
   useEffect(() => {
     listSeries()
@@ -96,13 +100,29 @@ export function Library({ onOpenBook, onClose }: LibraryProps) {
 
       {!selected && (
         <>
-          <Shelf title="Continue reading" books={inProgress} onOpenBook={onOpenBook} />
-          <Shelf title="On deck" books={onDeck} onOpenBook={onOpenBook} />
+          <input
+            className="search"
+            type="search"
+            placeholder="Search series…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {!q && (
+            <>
+              <Shelf title="Continue reading" books={inProgress} onOpenBook={onOpenBook} />
+              <Shelf title="On deck" books={onDeck} onOpenBook={onOpenBook} />
+            </>
+          )}
           <ul>
             {series === null &&
               !error &&
               [0, 1, 2, 3, 4, 5].map((i) => <li key={i} className="skel" />)}
-            {series?.map((s) => (
+            {q && shownSeries?.length === 0 && (
+              <li className="muted" style={{ padding: '10px' }}>
+                No series match “{query}”
+              </li>
+            )}
+            {shownSeries?.map((s) => (
               <li key={s.id}>
                 <button className="row" onClick={() => setSelected(s)}>
                   <img

@@ -12,3 +12,8 @@ import { createXRStore } from '@react-three/xr'
 export const xrStore = createXRStore({
   foveation: 0,
 })
+
+// End the immersive session and drop back to the 2D browser.
+export function exitVR() {
+  void xrStore.getState().session?.end()
+}

@@ -198,6 +198,21 @@ canvas { display: block; touch-action: none; }
   white-space: nowrap;
 }
 
+.library .search {
+  width: 100%;
+  margin-bottom: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  padding: 9px 12px;
+  min-height: 40px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+.library .search::placeholder { color: var(--muted); }
+.library .search:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+
 .library ul { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .library .row {
   width: 100%;

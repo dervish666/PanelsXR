@@ -13,6 +13,7 @@ import { PageSurface } from './PageSurface'
 import type { PageAmbience } from './PageSurface'
 import { XRPageInput } from './XRPageInput'
 import { UIButton } from './UIButton'
+import { exitVR } from '../xr/store'
 
 export interface ReaderProps {
   pages: string[]
@@ -101,21 +102,22 @@ export function Reader({
       {/* In-VR control bar under the comic — rides along when you grab it. */}
       {inXR && (
         <group position={[0, -0.92, 0.02]}>
-          <UIButton position={[-0.55, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
-          <UIButton position={[-0.25, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
+          <UIButton position={[-0.72, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
+          <UIButton position={[-0.42, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
           <UIButton
-            position={[0.14, 0, 0]}
+            position={[-0.03, 0, 0]}
             width={0.42}
             label={spread ? 'Single page' : 'Two-page'}
             onClick={onToggleSpread}
           />
           <UIButton
-            position={[0.53, 0, 0]}
+            position={[0.36, 0, 0]}
             width={0.3}
             label="Library"
             accent
             onClick={onOpenLibrary}
           />
+          <UIButton position={[0.71, 0, 0]} width={0.3} label="Exit VR" onClick={exitVR} />
         </group>
       )}
     </group>
