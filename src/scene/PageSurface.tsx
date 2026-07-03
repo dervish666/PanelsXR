@@ -31,9 +31,43 @@ function loadTexture(url: string): Promise<THREE.Texture> {
   })
 }
 
+export interface PageAmbience {
+  color: THREE.Color // darkened dominant colour of the current page
+  texture: THREE.CanvasTexture // tiny blurry copy for the backdrop plane
+}
+
+// Downsample the page to a tiny canvas: linear upscaling makes it a free blur,
+// and averaging its pixels gives the dominant colour for the room tint.
+function makeAmbience(img: HTMLImageElement): PageAmbience {
+  const c = document.createElement('canvas')
+  c.width = 20
+  c.height = 28
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(img, 0, 0, c.width, c.height)
+  const data = ctx.getImageData(0, 0, c.width, c.height).data
+  let r = 0
+  let g = 0
+  let b = 0
+  const n = data.length / 4
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i]
+    g += data[i + 1]
+    b += data[i + 2]
+  }
+  // Darken hard: the surround must stay dim in-headset (see PRODUCT.md).
+  const color = new THREE.Color(r / n / 255, g / n / 255, b / n / 255).multiplyScalar(0.16)
+  const texture = new THREE.CanvasTexture(c)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
+  return { color, texture }
+}
+
 export interface PageSurfaceProps {
   urls: string[]
   indices: number[] // 1 page (single) or 2 (spread), ascending
+  onAmbience?: (a: PageAmbience) => void
 }
 
 // NOTE: a WebXR quad layer (<XRLayer quality="text-optimized">) was tried here
@@ -41,7 +75,7 @@ export interface PageSurfaceProps {
 // IWER emulator only because IWER lacks layer support and silently used the
 // mesh fallback). Needs a dedicated on-device debugging session — see the
 // project note. The plain mesh below is the proven-readable path.
-export function PageSurface({ urls, indices }: PageSurfaceProps) {
+export function PageSurface({ urls, indices, onAmbience }: PageSurfaceProps) {
   const { gl } = useThree()
   const maxAnisotropy = useMemo(() => gl.capabilities.getMaxAnisotropy(), [gl])
   const cache = useRef<Map<number, THREE.Texture>>(new Map())
@@ -97,6 +131,18 @@ export function PageSurface({ urls, indices }: PageSurfaceProps) {
       cancelled = true
     }
   }, [indices, urls, maxAnisotropy])
+
+  // Emit the room ambience for the first visible page once it's resident.
+  const ambienceFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!onAmbience) return
+    const tex = cache.current.get(indices[0])
+    const img = tex?.image as HTMLImageElement | undefined
+    const key = urls[indices[0]]
+    if (!img || ambienceFor.current === key) return
+    ambienceFor.current = key
+    onAmbience(makeAmbience(img))
+  })
 
   // Dispose everything when the surface unmounts.
   useEffect(() => {

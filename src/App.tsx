@@ -4,6 +4,8 @@ import { Canvas } from '@react-three/fiber'
 import { XR } from '@react-three/xr'
 import { xrStore } from './xr/store'
 import { Reader } from './scene/Reader'
+import { LibrarySphere } from './scene/LibrarySphere'
+import { VRViewToggle } from './scene/VRViewToggle'
 import { makeSyntheticPages } from './pages/synthetic'
 import { loadCbz } from './pages/cbz'
 import { Library } from './ui/Library'
@@ -18,6 +20,7 @@ export function App() {
   const [index, setIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [view, setView] = useState<'read' | 'sphere'>('read')
   const [book, setBook] = useState<KomgaBook | null>(null)
   const [spread, setSpread] = useState(() => localStorage.getItem(SPREAD_KEY) === '1')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -63,6 +66,7 @@ export function App() {
     setIndex(rp && !rp.completed ? Math.min(rp.page - 1, urls.length - 1) : 0)
     setBook(b)
     setShowLibrary(false)
+    setView('read')
     setError(null)
     localStorage.setItem(LAST_BOOK_KEY, b.id)
   }, [])
@@ -153,6 +157,9 @@ export function App() {
             {spread ? 'Single page' : 'Two-page'}
           </button>
           <button onClick={() => setShowLibrary((v) => !v)}>Library</button>
+          <button onClick={() => setView((v) => (v === 'sphere' ? 'read' : 'sphere'))}>
+            {view === 'sphere' ? 'Back to book' : '3D library'}
+          </button>
           <label className="file">
             Load .cbz
             <input
@@ -175,16 +182,38 @@ export function App() {
         {error && <div className="error">{error}</div>}
         <div className="hint">
           Turn: right stick / ← → · Grab: trigger (two to resize) · Walk: left stick ·
-          X recenters
+          X recenters · Y opens the 3D library
         </div>
       </div>
 
       {showLibrary && <Library onOpenBook={openBook} onClose={() => setShowLibrary(false)} />}
 
       <Canvas camera={{ position: [0, 1.4, 0.35], fov: 60 }} gl={{ antialias: true }}>
-        <color attach="background" args={['#0e0e12']} />
         <XR store={xrStore}>
-          <Reader pages={pages} indices={visible} onNext={next} onPrev={prev} />
+          <VRViewToggle
+            onToggle={() => setView((v) => (v === 'sphere' ? 'read' : 'sphere'))}
+          />
+          {view === 'sphere' ? (
+            <LibrarySphere
+              onOpenBook={openBook}
+              onClose={() => setView('read')}
+            />
+          ) : (
+            <Reader
+              pages={pages}
+              indices={visible}
+              onNext={next}
+              onPrev={prev}
+              spread={spread}
+              onToggleSpread={() =>
+                setSpread((v) => {
+                  localStorage.setItem(SPREAD_KEY, v ? '0' : '1')
+                  return !v
+                })
+              }
+              onOpenLibrary={() => setView('sphere')}
+            />
+          )}
         </XR>
       </Canvas>
     </>

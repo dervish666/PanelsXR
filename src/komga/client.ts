@@ -50,6 +50,19 @@ export async function listOnDeck(): Promise<KomgaBook[]> {
   return page.content.filter((b) => b.media.status === 'READY')
 }
 
+// First unread book in a series (or just the first book if all are read) —
+// what "open this series" means when picking a cover off the shelf sphere.
+export async function firstUnreadBook(seriesId: string): Promise<KomgaBook | null> {
+  const unread = await get<KomgaPage<KomgaBook>>(
+    `/series/${seriesId}/books?read_status=UNREAD&size=1&sort=metadata.numberSort,asc`,
+  )
+  if (unread.content.length > 0) return unread.content[0]
+  const any = await get<KomgaPage<KomgaBook>>(
+    `/series/${seriesId}/books?size=1&sort=metadata.numberSort,asc`,
+  )
+  return any.content[0] ?? null
+}
+
 // Page images are 1-indexed in Komga.
 export function pageUrl(bookId: string, page: number): string {
   return `${BASE}/books/${bookId}/pages/${page}`

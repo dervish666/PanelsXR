@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { Handle } from '@react-three/handle'
@@ -10,13 +10,18 @@ import {
 } from '@react-three/xr'
 import { Group, Vector3 } from 'three'
 import { PageSurface } from './PageSurface'
+import type { PageAmbience } from './PageSurface'
 import { XRPageInput } from './XRPageInput'
+import { UIButton } from './UIButton'
 
 export interface ReaderProps {
   pages: string[]
   indices: number[] // visible page indices (1 = single, 2 = spread)
   onNext: () => void
   onPrev: () => void
+  spread: boolean
+  onToggleSpread: () => void
+  onOpenLibrary: () => void
 }
 
 // Where the page sits when you enter VR / on desktop.
@@ -76,19 +81,52 @@ function VRMovement({
 
 // The reading scene. In VR the page is a grab handle (move / rotate / two-handed
 // scale) and the left stick moves you around; on desktop we fall back to orbit.
-export function Reader({ pages, indices, onNext, onPrev }: ReaderProps) {
+export function Reader({
+  pages,
+  indices,
+  onNext,
+  onPrev,
+  spread,
+  onToggleSpread,
+  onOpenLibrary,
+}: ReaderProps) {
   const inXR = useXR((s) => s.session != null)
   const pageRef = useRef<Group>(null)
   const originRef = useRef<Group>(null)
+  const [ambience, setAmbience] = useState<PageAmbience | null>(null)
 
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
-      <PageSurface urls={pages} indices={indices} />
+      <PageSurface urls={pages} indices={indices} onAmbience={setAmbience} />
+      {/* In-VR control bar under the comic — rides along when you grab it. */}
+      {inXR && (
+        <group position={[0, -0.92, 0.02]}>
+          <UIButton position={[-0.55, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
+          <UIButton position={[-0.25, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
+          <UIButton
+            position={[0.14, 0, 0]}
+            width={0.42}
+            label={spread ? 'Single page' : 'Two-page'}
+            onClick={onToggleSpread}
+          />
+          <UIButton
+            position={[0.53, 0, 0]}
+            width={0.3}
+            label="Library"
+            accent
+            onClick={onOpenLibrary}
+          />
+        </group>
+      )}
     </group>
   )
 
   return (
     <>
+      {/* Room atmosphere: the void takes the page's dominant colour. (A big
+          blurred page copy was tried behind it too — Sam judged it worse than
+          colour alone, so it's just the wash now.) */}
+      {ambience && <color attach="background" args={[ambience.color]} />}
       {inXR ? (
         // Grab the page with the trigger to move/rotate it; grab with both
         // controllers and pull apart to resize.
