@@ -15,13 +15,13 @@ import {
 import type { KomgaBook } from '../komga/types'
 
 const MAX_ITEMS = 72
-const RADIUS = 2.6
+const RADIUS = 3.4 // roomy — use the space
 const HEAD = 1.5 // sphere centred at head height
-const CARD_W = 0.34
-const CARD_H = 0.5
-const FLY_MS = 750
-const STAGGER_MS = 16
-const HOVER_SCALE = 1.65
+const CARD_W = 0.52
+const CARD_H = 0.76
+const FLY_MS = 1600 // slower, more cinematic approach
+const STAGGER_MS = 26
+const HOVER_SCALE = 1.5
 
 interface SphereItem {
   key: string
@@ -37,7 +37,9 @@ interface SphereItem {
 function bandPosition(i: number, n: number): THREE.Vector3 {
   const golden = Math.PI * (3 - Math.sqrt(5))
   const t = n === 1 ? 0.5 : i / (n - 1)
-  const elevation = THREE.MathUtils.lerp(-0.22, 0.42, t) // radians above horizon
+  // wide vertical spread — a dome from below eye level to well overhead,
+  // not a belt round the middle (but nothing under the floor)
+  const elevation = THREE.MathUtils.lerp(-0.45, 0.9, t) // radians above horizon
   const azimuth = i * golden
   return new THREE.Vector3(
     RADIUS * Math.cos(elevation) * Math.sin(azimuth),
@@ -108,10 +110,10 @@ function Cover({
   const [hover, setHover] = useState(false)
   const born = useRef<number | null>(null)
 
-  // Fly-in start: outside the sphere and a bit low, so covers sweep inward
-  // and up into place — racks sliding in, never through the user's face.
+  // Fly-in start: well outside the sphere and a bit low, so covers sweep in
+  // from the distance and rise into place — never through the user's face.
   const start = useMemo(
-    () => new THREE.Vector3(target.x * 1.9, target.y - 1.4, target.z * 1.9),
+    () => new THREE.Vector3(target.x * 3.4, target.y - 2.2, target.z * 3.4),
     [target],
   )
 

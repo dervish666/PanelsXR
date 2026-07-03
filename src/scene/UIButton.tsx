@@ -25,6 +25,9 @@ export function UIButton({ position, width, label, accent = false, onClick }: UI
           setHover(true)
         }}
         onPointerOut={() => setHover(false)}
+        // swallow the press: without this, a trigger-press on a button inside
+        // the grab <Handle> starts a grab and drags the whole comic around
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
           onClick()
