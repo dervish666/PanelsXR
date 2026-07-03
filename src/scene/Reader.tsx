@@ -14,7 +14,7 @@ import { XRPageInput } from './XRPageInput'
 
 export interface ReaderProps {
   pages: string[]
-  index: number
+  indices: number[] // visible page indices (1 = single, 2 = spread)
   onNext: () => void
   onPrev: () => void
 }
@@ -76,14 +76,14 @@ function VRMovement({
 
 // The reading scene. In VR the page is a grab handle (move / rotate / two-handed
 // scale) and the left stick moves you around; on desktop we fall back to orbit.
-export function Reader({ pages, index, onNext, onPrev }: ReaderProps) {
+export function Reader({ pages, indices, onNext, onPrev }: ReaderProps) {
   const inXR = useXR((s) => s.session != null)
   const pageRef = useRef<Group>(null)
   const originRef = useRef<Group>(null)
 
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
-      <PageSurface urls={pages} index={index} />
+      <PageSurface urls={pages} indices={indices} />
     </group>
   )
 

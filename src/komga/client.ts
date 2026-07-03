@@ -28,9 +28,39 @@ export function getBook(bookId: string): Promise<KomgaBook> {
   return get<KomgaBook>(`/books/${bookId}`)
 }
 
+// Books currently being read, most recently touched first — the "continue
+// reading" shelf. Uses the newer POST /books/list search (more reliable than
+// GET /books, which is fiddly about filters).
+export async function listInProgress(): Promise<KomgaBook[]> {
+  const res = await fetch(`${BASE}/books/list?size=12&sort=readProgress.readDate,desc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      condition: { readStatus: { operator: 'is', value: 'IN_PROGRESS' } },
+    }),
+  })
+  if (!res.ok) throw new Error(`Komga ${res.status} on /books/list`)
+  const page = (await res.json()) as KomgaPage<KomgaBook>
+  return page.content.filter((b) => b.media.status === 'READY')
+}
+
+// Komga's "on deck": the next unread book in series you've been reading.
+export async function listOnDeck(): Promise<KomgaBook[]> {
+  const page = await get<KomgaPage<KomgaBook>>('/books/ondeck?size=12')
+  return page.content.filter((b) => b.media.status === 'READY')
+}
+
 // Page images are 1-indexed in Komga.
 export function pageUrl(bookId: string, page: number): string {
   return `${BASE}/books/${bookId}/pages/${page}`
+}
+
+export function seriesThumbUrl(seriesId: string): string {
+  return `${BASE}/series/${seriesId}/thumbnail`
+}
+
+export function bookThumbUrl(bookId: string): string {
+  return `${BASE}/books/${bookId}/thumbnail`
 }
 
 export function bookPageUrls(book: KomgaBook): string[] {

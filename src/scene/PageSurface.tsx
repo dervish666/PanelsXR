@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// Keep the current page plus this many neighbours resident; dispose the rest.
+// Keep the visible pages plus this many neighbours resident; dispose the rest.
 // Quest RAM is finite and full-res comic pages are large.
 const WINDOW = 2
+const PAGE_HEIGHT = 1.5
+const SPREAD_GAP = 0.012 // slim gutter between pages in spread mode
 
 function makeTexture(img: HTMLImageElement): THREE.Texture {
   const tex = new THREE.Texture(img)
@@ -31,15 +33,21 @@ function loadTexture(url: string): Promise<THREE.Texture> {
 
 export interface PageSurfaceProps {
   urls: string[]
-  index: number
+  indices: number[] // 1 page (single) or 2 (spread), ascending
 }
 
-export function PageSurface({ urls, index }: PageSurfaceProps) {
+// NOTE: a WebXR quad layer (<XRLayer quality="text-optimized">) was tried here
+// for compositor-sharp text, but rendered BLACK on the real Quest (works in the
+// IWER emulator only because IWER lacks layer support and silently used the
+// mesh fallback). Needs a dedicated on-device debugging session — see the
+// project note. The plain mesh below is the proven-readable path.
+export function PageSurface({ urls, indices }: PageSurfaceProps) {
   const { gl } = useThree()
   const maxAnisotropy = useMemo(() => gl.capabilities.getMaxAnisotropy(), [gl])
   const cache = useRef<Map<number, THREE.Texture>>(new Map())
   const cacheUrls = useRef<string[] | null>(null)
-  const [current, setCurrent] = useState<THREE.Texture | null>(null)
+  // Textures live in the cache ref; bump forces a re-render when one arrives.
+  const [, bump] = useReducer((c: number) => c + 1, 0)
 
   useEffect(() => {
     let cancelled = false
@@ -50,13 +58,14 @@ export function PageSurface({ urls, index }: PageSurfaceProps) {
       for (const tex of cache.current.values()) tex.dispose()
       cache.current.clear()
       cacheUrls.current = urls
-      setCurrent(null)
     }
 
     const want = new Set<number>()
-    for (let d = -WINDOW; d <= WINDOW; d++) {
-      const i = index + d
-      if (i >= 0 && i < urls.length) want.add(i)
+    for (const idx of indices) {
+      for (let d = -WINDOW; d <= WINDOW; d++) {
+        const i = idx + d
+        if (i >= 0 && i < urls.length) want.add(i)
+      }
     }
 
     // Dispose anything outside the window.
@@ -67,11 +76,7 @@ export function PageSurface({ urls, index }: PageSurfaceProps) {
       }
     }
 
-    // Show the current page immediately if it's already resident.
-    const cached = cache.current.get(index)
-    if (cached) setCurrent(cached)
-
-    // Load whatever is missing (this preloads neighbours so turns are instant).
+    // Load whatever is missing (preloads neighbours so turns are instant).
     for (const i of want) {
       if (cache.current.has(i)) continue
       loadTexture(urls[i])
@@ -82,15 +87,16 @@ export function PageSurface({ urls, index }: PageSurfaceProps) {
           }
           tex.anisotropy = maxAnisotropy
           cache.current.set(i, tex)
-          if (i === index) setCurrent(tex)
+          bump()
         })
         .catch((err) => console.error('[Panel]', err))
     }
 
+    bump()
     return () => {
       cancelled = true
     }
-  }, [index, urls, maxAnisotropy])
+  }, [indices, urls, maxAnisotropy])
 
   // Dispose everything when the surface unmounts.
   useEffect(() => {
@@ -101,31 +107,39 @@ export function PageSurface({ urls, index }: PageSurfaceProps) {
     }
   }, [])
 
-  const img = current?.image as HTMLImageElement | undefined
-  const aspect = img && img.width ? img.width / img.height : 2 / 3
-  const height = 1.5
-  const width = height * aspect
+  // Lay the visible pages out side by side, centred as a unit. Each page keeps
+  // its own aspect ratio at a common height.
+  const pages = indices.map((i) => {
+    const tex = cache.current.get(i) ?? null
+    const img = tex?.image as HTMLImageElement | undefined
+    const aspect = img && img.width ? img.width / img.height : 2 / 3
+    return { i, tex, width: PAGE_HEIGHT * aspect }
+  })
+  const totalWidth =
+    pages.reduce((sum, p) => sum + p.width, 0) + SPREAD_GAP * (pages.length - 1)
 
-  // NOTE: a WebXR quad layer (<XRLayer quality="text-optimized">) was tried here
-  // for compositor-sharp text, but rendered BLACK on the real Quest (works in the
-  // IWER emulator only because IWER lacks layer support and silently used the
-  // mesh fallback). Needs a dedicated on-device debugging session — see the
-  // project note. The plain mesh below is the proven-readable path.
-
-  // Positioned at local origin; the parent group (in Reader) places it in the
-  // room and, in VR, is the grab target.
+  let x = -totalWidth / 2
   return (
-    <mesh>
-      <planeGeometry args={[width, height]} />
-      {/* key on the texture so the material remounts (and its shader recompiles
-          with USE_MAP) when the page changes — otherwise a map added after the
-          first compile is silently ignored and the plane renders flat white. */}
-      <meshBasicMaterial
-        key={current ? current.uuid : 'placeholder'}
-        map={current ?? null}
-        color={current ? '#ffffff' : '#1a1a22'}
-        toneMapped={false}
-      />
-    </mesh>
+    <group>
+      {pages.map((p) => {
+        const cx = x + p.width / 2
+        x += p.width + SPREAD_GAP
+        return (
+          <mesh key={p.i} position={[cx, 0, 0]}>
+            <planeGeometry args={[p.width, PAGE_HEIGHT]} />
+            {/* key on the texture so the material remounts (and its shader
+                recompiles with USE_MAP) when the page changes — otherwise a map
+                added after the first compile is silently ignored and the plane
+                renders flat white. */}
+            <meshBasicMaterial
+              key={p.tex ? p.tex.uuid : 'placeholder'}
+              map={p.tex}
+              color={p.tex ? '#ffffff' : '#1a1a22'}
+              toneMapped={false}
+            />
+          </mesh>
+        )
+      })}
+    </group>
   )
 }

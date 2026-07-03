@@ -22,6 +22,7 @@ export interface KomgaReadProgress {
 export interface KomgaBook {
   id: string
   seriesId: string
+  seriesTitle: string
   name: string
   number: number
   media: {
