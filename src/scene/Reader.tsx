@@ -8,7 +8,7 @@ import {
   useXRControllerLocomotion,
   useXRInputSourceState,
 } from '@react-three/xr'
-import { Group, Vector3 } from 'three'
+import { Group, Matrix4, Vector3 } from 'three'
 import { PageSurface } from './PageSurface'
 import type { PageAmbience } from './PageSurface'
 import { XRPageInput } from './XRPageInput'
@@ -29,6 +29,30 @@ export interface ReaderProps {
 const INITIAL_PAGE_POS: [number, number, number] = [0, 1.35, -1.6]
 const MOVE_SPEED = 1.2 // metres/sec for left-stick locomotion (gentle, seated-friendly)
 const MOVE_DEADZONE = 0.15 // the locomotion hook applies no deadzone, so filter stick drift here
+const BAR_OFFSET = new Matrix4().makeTranslation(0, -0.92, 0.02)
+
+// The in-VR control bar lives OUTSIDE the grab <Handle> (buttons inside it get
+// picked up by the grab pointer on real hardware) and follows the comic by
+// copying its world transform each frame — rides along, but can't be grabbed.
+function ControlBar({
+  pageRef,
+  children,
+}: {
+  pageRef: React.RefObject<Group | null>
+  children: React.ReactNode
+}) {
+  const barRef = useRef<Group>(null)
+  const m = useRef(new Matrix4())
+  useFrame(() => {
+    const page = pageRef.current
+    const bar = barRef.current
+    if (!page || !bar) return
+    page.updateWorldMatrix(true, false)
+    m.current.multiplyMatrices(page.matrixWorld, BAR_OFFSET)
+    m.current.decompose(bar.position, bar.quaternion, bar.scale)
+  })
+  return <group ref={barRef}>{children}</group>
+}
 
 // Left-stick smooth locomotion + a left-X recenter. Right stick stays free for
 // paging, so we drive locomotion via the callback form and ignore its rotation.
@@ -99,27 +123,6 @@ export function Reader({
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
       <PageSurface urls={pages} indices={indices} onAmbience={setAmbience} />
-      {/* In-VR control bar under the comic — rides along when you grab it. */}
-      {inXR && (
-        <group position={[0, -0.92, 0.02]}>
-          <UIButton position={[-0.72, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
-          <UIButton position={[-0.42, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
-          <UIButton
-            position={[-0.03, 0, 0]}
-            width={0.42}
-            label={spread ? 'Single page' : 'Two-page'}
-            onClick={onToggleSpread}
-          />
-          <UIButton
-            position={[0.36, 0, 0]}
-            width={0.3}
-            label="Library"
-            accent
-            onClick={onOpenLibrary}
-          />
-          <UIButton position={[0.71, 0, 0]} width={0.3} label="Exit VR" onClick={exitVR} />
-        </group>
-      )}
     </group>
   )
 
@@ -137,6 +140,27 @@ export function Reader({
         </Handle>
       ) : (
         page
+      )}
+
+      {inXR && (
+        <ControlBar pageRef={pageRef}>
+          <UIButton position={[-0.72, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
+          <UIButton position={[-0.42, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
+          <UIButton
+            position={[-0.03, 0, 0]}
+            width={0.42}
+            label={spread ? 'Single page' : 'Two-page'}
+            onClick={onToggleSpread}
+          />
+          <UIButton
+            position={[0.36, 0, 0]}
+            width={0.3}
+            label="Library"
+            accent
+            onClick={onOpenLibrary}
+          />
+          <UIButton position={[0.71, 0, 0]} width={0.3} label="Exit VR" onClick={exitVR} />
+        </ControlBar>
       )}
 
       <XRPageInput onNext={onNext} onPrev={onPrev} />

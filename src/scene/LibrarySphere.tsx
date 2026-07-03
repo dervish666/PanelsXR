@@ -219,28 +219,70 @@ export interface LibrarySphereProps {
 
 // The in-VR library: covers fly up and surround you; point at one to grow it
 // and read its title; select to open. Shelf books first, then series covers.
-function azimuthOf(p: THREE.Vector3): number {
-  return Math.atan2(p.x, -p.z)
-}
+const _q = new THREE.Quaternion()
+const _dir = new THREE.Vector3()
 
 export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   const [items, setItems] = useState<SphereItem[] | null>(null)
   const inXR = useXR((s) => s.session != null)
   const rotGroup = useRef<THREE.Group>(null)
-  // drag-to-spin state: track the pointer's azimuth and how far it has pulled,
-  // so a real pull spins the sphere and a stationary press still counts as a click
-  const drag = useRef<{ az: number; moved: number } | null>(null)
+  // trigger-drag spin: tracked at the CONTROLLER level (its pointing azimuth
+  // from the XR pose), not via mesh pointer-events — so pulling works aimed at
+  // covers, gaps, or empty void alike, and the ray visuals stay untouched.
+  const drag = useRef<{ hand: number; az: number; moved: number } | null>(null)
   const suppressClick = useRef(false)
   const right = useXRInputSourceState('controller', 'right')
+  const left = useXRInputSourceState('controller', 'left')
 
-  useFrame((_, dt) => {
+  useFrame((state, dt, frame: XRFrame | undefined) => {
+    const g = rotGroup.current
+    if (!g) return
+
     // right thumbstick spins the library — the easy seated option
     const stick = right?.gamepad?.['xr-standard-thumbstick'] as
       | { xAxis?: number }
       | undefined
     const x = stick?.xAxis ?? 0
-    if (Math.abs(x) > 0.2 && rotGroup.current) {
-      rotGroup.current.rotation.y -= x * dt * 1.6
+    if (Math.abs(x) > 0.2) g.rotation.y -= x * dt * 1.6
+
+    // trigger-hold + swing = pull the sphere round
+    if (!frame) return
+    const refSpace = state.gl.xr.getReferenceSpace()
+    if (!refSpace) return
+    const hands = [right, left]
+    for (let i = 0; i < hands.length; i++) {
+      const ctrl = hands[i]
+      const pressed =
+        (ctrl?.gamepad?.['xr-standard-trigger'] as { state?: string } | undefined)
+          ?.state === 'pressed'
+      const src = ctrl?.inputSource
+      if (!src) continue
+      if (pressed) {
+        const pose = frame.getPose(src.targetRaySpace, refSpace)
+        if (!pose) continue
+        const o = pose.transform.orientation
+        _q.set(o.x, o.y, o.z, o.w)
+        _dir.set(0, 0, -1).applyQuaternion(_q)
+        const az = Math.atan2(_dir.x, -_dir.z)
+        const d = drag.current
+        if (d && d.hand === i) {
+          let delta = az - d.az
+          if (delta > Math.PI) delta -= Math.PI * 2
+          if (delta < -Math.PI) delta += Math.PI * 2
+          // rotate so the spot you grabbed stays under the laser
+          g.rotation.y -= delta
+          d.az = az
+          d.moved += Math.abs(delta)
+          if (d.moved > 0.06) suppressClick.current = true
+        } else if (!d) {
+          drag.current = { hand: i, az, moved: 0 }
+          suppressClick.current = false
+        }
+      } else if (drag.current?.hand === i) {
+        drag.current = null
+        // let the click that ends this gesture see the flag, then clear
+        setTimeout(() => (suppressClick.current = false), 80)
+      }
     }
   })
 
@@ -302,45 +344,13 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   if (!items) return null
   return (
     <group>
-      {/* the rotating shell: click-and-pull any cover sideways to spin it
-          (VR only — desktop already orbits with the mouse) */}
-      <group
-        ref={rotGroup}
-        onPointerDown={
-          inXR
-            ? (e) => {
-                drag.current = { az: azimuthOf(e.point), moved: 0 }
-                suppressClick.current = false
-              }
-            : undefined
-        }
-        onPointerMove={
-          inXR
-            ? (e) => {
-                const d = drag.current
-                const g = rotGroup.current
-                if (!d || !g) return
-                const az = azimuthOf(e.point)
-                let delta = az - d.az
-                if (delta > Math.PI) delta -= Math.PI * 2
-                if (delta < -Math.PI) delta += Math.PI * 2
-                g.rotation.y += delta
-                d.az = az
-                d.moved += Math.abs(delta)
-                if (d.moved > 0.05) suppressClick.current = true
-              }
-            : undefined
-        }
-        onPointerUp={
-          inXR
-            ? () => {
-                drag.current = null
-                // let the click that ends this gesture see the flag, then clear
-                setTimeout(() => (suppressClick.current = false), 80)
-              }
-            : undefined
-        }
-      >
+      {/* the rotating shell — spun by trigger-drag (controller-level, see
+          useFrame above) or the right thumbstick; desktop orbits with the mouse */}
+      <group ref={rotGroup}>
+        {/* NOTE: an invisible catch-all shell was tried here so drags work in
+            the gaps between covers — it broke the controller pointer visuals
+            and fed the grab pointer reversed azimuths on-device. Gap coverage
+            comes from the right-stick spin instead. */}
         {items.map((item, i) => (
           <Cover
             key={item.key}
