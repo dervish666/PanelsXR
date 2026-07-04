@@ -6,17 +6,28 @@
 # the client needs no changes. Configure at runtime via env:
 #   KOMGA_URL       e.g. http://192.168.1.10:8080  or  https://komga.example.com
 #   KOMGA_API_KEY   a Komga API key (Account Settings → API Keys)
+#   PANEL_USER      basic-auth username (optional, default "panel")
+#   PANEL_PASSWORD  basic-auth password (optional) — if set, the whole app is
+#                   gated behind HTTP basic auth. The Quest browser caches it, so
+#                   it's a one-time login. Leave unset for LAN-only / CF-Access.
 #
 # NOTE: WebXR requires a secure context (HTTPS). Access this behind your reverse
 # proxy (SWAG / Nginx Proxy Manager / Cloudflare Tunnel) — a plain http://IP:port
 # will load the 2D page but the Quest browser won't enter VR.
 
 :80 {
-	# same-origin Komga proxy — strips /komga, injects the key, forwards upstream
+	# optional HTTP basic auth — written at container start from PANEL_USER /
+	# PANEL_PASSWORD (empty/comment when unset, so this is a no-op then)
+	import /etc/caddy/auth.conf
+
+	# same-origin Komga proxy — strips /komga, injects the key, forwards upstream.
+	# Also strips the Authorization header so Panel's basic-auth creds never leak
+	# to Komga (which authenticates purely on the injected X-API-Key).
 	handle_path /komga/* {
 		reverse_proxy {$KOMGA_URL} {
 			header_up X-API-Key {$KOMGA_API_KEY}
 			header_up Host {upstream_hostport}
+			header_up -Authorization
 		}
 	}
 

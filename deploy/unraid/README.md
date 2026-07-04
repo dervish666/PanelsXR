@@ -13,6 +13,27 @@ the 2D page fine, but the **Quest browser won't enter VR**. Put Panel behind
 your existing reverse proxy (SWAG / Nginx Proxy Manager / Cloudflare Tunnel) so
 it's served over `https://`. Same story as any WebXR app.
 
+## 🔒 Lock it down before you expose it
+
+The container **injects your Komga API key** into every `/komga` request, so an
+*unauthenticated* Panel on the public internet is an open proxy to your whole
+library (it bypasses Komga's own auth). Before you put it on a public URL, gate
+it — two independent layers, use either or both:
+
+- **Built-in basic auth (portable, recommended).** Set `PANEL_USER` +
+  `PANEL_PASSWORD` and the whole app (and the Komga proxy) sits behind an HTTP
+  basic-auth login. The browser caches it, so it's a **one-time** login in the
+  Quest — no monthly re-auth. Works for anyone, no Cloudflare needed. The
+  password is hashed at container start (never stored in plaintext).
+- **Edge auth (Cloudflare Access / reverse-proxy SSO).** If you front Panel with
+  a Cloudflare Tunnel, add a CF Access policy on the hostname for SSO-grade
+  gating at the edge. Great as a personal outer layer; note CF Access sessions
+  expire periodically, which is why basic auth is nicer for the actual reading.
+
+**Least privilege (do this too):** give Panel a **dedicated Komga user** with
+read-only access to just the libraries you want in VR, and use *that* user's API
+key — so even a worst case only exposes that limited view, not your whole account.
+
 ## What you need
 
 - A **Komga API key** — Komga → Account Settings → API Keys.

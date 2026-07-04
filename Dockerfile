@@ -9,9 +9,11 @@ COPY . .
 RUN npm run build
 
 # --- stage 2: serve it. Caddy handles static files + the env-driven Komga
-#     proxy in one tiny binary (reads KOMGA_URL / KOMGA_API_KEY at runtime). ---
+#     proxy + optional basic auth, all read at runtime. ---
 FROM caddy:2-alpine
 COPY --from=build /app/dist /srv
 COPY Caddyfile /etc/caddy/Caddyfile
+COPY docker-entrypoint.sh /usr/local/bin/panel-entrypoint.sh
+RUN chmod +x /usr/local/bin/panel-entrypoint.sh
 EXPOSE 80
-# caddy:alpine's default entrypoint runs `caddy run` against /etc/caddy/Caddyfile
+ENTRYPOINT ["/usr/local/bin/panel-entrypoint.sh"]
