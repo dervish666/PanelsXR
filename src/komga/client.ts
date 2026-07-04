@@ -12,8 +12,40 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export async function listSeries(): Promise<KomgaSeries[]> {
-  const page = await get<KomgaPage<KomgaSeries>>('/series?size=200&sort=metadata.titleSort,asc')
+  // size=500 gives headroom over the ~189 series today; Komga returns all in
+  // one page (no client-side paging needed — the sphere paginates the display).
+  const page = await get<KomgaPage<KomgaSeries>>('/series?size=500&sort=metadata.titleSort,asc')
   return page.content
+}
+
+export interface LetterBucket {
+  letter: string // 'A'..'Z' or '#'
+  series: KomgaSeries[]
+}
+
+// The index letter for a series: first character of the display name,
+// uppercased; anything that isn't A–Z (digits, symbols, "2000 AD") → '#'.
+export function letterOf(name: string): string {
+  const c = (name.trim()[0] ?? '#').toUpperCase()
+  return c >= 'A' && c <= 'Z' ? c : '#'
+}
+
+// Bucket series into A–Z stacks (+ '#' last) for the alphabetical shelf.
+// Preserves the incoming order within each bucket (listSeries is titleSort,asc)
+// and omits empty letters. Pure + headset-independent → unit-tested. On Sam's
+// live library this yields ~21 buckets, V the fattest (~82, the "Volume NN"
+// imports), '#' holding numeric-titled series like "2000 AD".
+export function bucketSeriesByFirstLetter(series: KomgaSeries[]): LetterBucket[] {
+  const map = new Map<string, KomgaSeries[]>()
+  for (const s of series) {
+    const k = letterOf(s.name)
+    const arr = map.get(k)
+    if (arr) arr.push(s)
+    else map.set(k, [s])
+  }
+  return [...map.keys()]
+    .sort((a, b) => (a === '#' ? 1 : b === '#' ? -1 : a < b ? -1 : 1))
+    .map((letter) => ({ letter, series: map.get(letter)! }))
 }
 
 export async function listBooks(seriesId: string): Promise<KomgaBook[]> {

@@ -1,6 +1,6 @@
 /* Panel — comic-shop pulp. Inky blacks, one pulp-red accent, chunky display
-   type, halftone as a single signature mark. The 3D page is the hero; this
-   chrome frames it and stays out of the way. */
+   type, halftone as a single signature mark, and comic action-bursts (POW!)
+   for the hero moments. The 3D page is the hero; this chrome frames it. */
 
 :root {
   /* palette (warm-tinted near-blacks; red is the only accent) */
@@ -14,6 +14,19 @@
   --accent-press: oklch(53% 0.2 28);
   --border: oklch(30% 0.02 25);
   --danger-bg: oklch(24% 0.06 28);
+  /* keyline / print-black — the heavy comic outline + hard-offset shadow */
+  --ink-black: oklch(10% 0.01 25);
+  /* held-back "energy" pop (POW! yellow) — NOT applied by default; the
+     identity is single-red-accent. Behind .burst--pow if we ever opt in. */
+  --pow: oklch(83% 0.17 92);
+  /* the marquee "cover panel" ground — a warm oxblood so the red ENTER VR
+     burst reads printed-on, not floating on the void (the reading surround
+     stays inky; only this front-door placard warms up). */
+  --panel: oklch(31% 0.07 25);
+  --panel-2: oklch(27% 0.06 25);
+  --panel-card: oklch(24% 0.052 25);
+  --panel-border: oklch(44% 0.09 25);
+  --panel-muted: oklch(83% 0.03 40);
 
   --font-display: 'Archivo Black', system-ui, sans-serif;
   --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -23,6 +36,14 @@
   --r-l: 14px;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* the comic starburst outline, shared by fill + keyline layers */
+  --star: polygon(
+    50% 0%, 61% 12%, 76% 6%, 74% 23%, 92% 22%, 82% 36%, 100% 44%,
+    85% 52%, 97% 66%, 79% 66%, 83% 84%, 68% 74%, 62% 92%, 50% 79%,
+    38% 92%, 32% 74%, 17% 84%, 21% 66%, 3% 66%, 15% 52%,
+    0% 44%, 18% 36%, 8% 22%, 26% 23%, 24% 6%, 39% 12%
+  );
 
   --z-hud: 10;
   --z-panel: 20;
@@ -38,99 +59,336 @@ body {
 }
 canvas { display: block; touch-action: none; }
 
-/* ---------- HUD overlay ---------- */
+/* ============================================================
+   BUTTON SYSTEM — the comic-shop vocabulary
+   .btn         sticker workhorse (Library, 3D, modes)
+   .btn.accent  red sticker (secondary primary)
+   .btn-ghost   quiet chrome (Prev/Next, Load .cbz)
+   .burst       comic action-starburst (hero + primary CTAs)
+   .bubble      speech-bubble label / hint
+   ============================================================ */
 
-.overlay {
+/* --- sticker workhorse: black keyline + hard-offset print shadow --- */
+.btn {
+  --shadow-c: var(--ink-black);
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--ink-black);
+  border-radius: var(--r-s);
+  padding: 11px 20px;
+  min-height: 44px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow-c);
+  transition: transform 100ms var(--ease-out), box-shadow 100ms var(--ease-out),
+    background 130ms var(--ease-out);
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  transform: translate(-1px, -1px);
+  --shadow-c: var(--accent);
+  box-shadow: 4px 4px 0 var(--shadow-c);
+}
+.btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--shadow-c);
+}
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.accent {
+  background: var(--accent);
+  color: oklch(97% 0.01 25);
+}
+.btn.accent:hover:not(:disabled) { background: var(--accent-hi); --shadow-c: var(--ink-black); }
+.btn.sm { min-height: 38px; padding: 8px 14px; font-size: 13px; box-shadow: 2px 2px 0 var(--shadow-c); }
+.btn.sm:hover:not(:disabled) { box-shadow: 3px 3px 0 var(--accent); }
+
+/* --- ghost: quiet, for chrome that shouldn't shout --- */
+.btn-ghost {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: var(--r-s);
+  padding: 10px 16px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out), transform 100ms var(--ease-out);
+}
+.btn-ghost:hover:not(:disabled) { color: var(--ink); border-color: oklch(40% 0.03 27); background: var(--surface); }
+.btn-ghost:active:not(:disabled) { transform: translateY(1px); }
+.btn-ghost:disabled { opacity: 0.35; cursor: default; }
+.btn-ghost.sm { min-height: 38px; padding: 7px 12px; font-size: 12px; }
+.btn-ghost.icon { padding: 10px 14px; }
+
+/* --- comic action-starburst: the hero + primary-CTA treatment --- */
+.burst {
+  --burst-fill: var(--accent);
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  color: oklch(97% 0.01 25);
+  background: transparent;
+  border: 0;
+  padding: 16px 30px;
+  min-height: 44px;
+  cursor: pointer;
+  filter: drop-shadow(4px 5px 0 oklch(0% 0 0 / 0.5));
+  transition: transform 120ms var(--ease-out);
+}
+.burst::before { /* the coloured fill */
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background: var(--burst-fill);
+  clip-path: var(--star);
+}
+.burst::after { /* die-cut keyline: same shape scaled up — light, to lift off the void */
+  content: "";
+  position: absolute; inset: 0; z-index: -2;
+  background: var(--ink);
+  transform: scale(1.09);
+  transform-origin: center;
+  clip-path: var(--star);
+}
+.burst:hover:not(:disabled) { transform: rotate(-2deg) scale(1.04); }
+.burst:active:not(:disabled) { transform: rotate(-2deg) scale(0.97) translateY(2px); --burst-fill: var(--accent-press); }
+.burst:disabled { opacity: 0.5; cursor: default; }
+.burst.sm { font-size: 13px; padding: 11px 26px; min-height: 40px; filter: drop-shadow(3px 4px 0 oklch(0% 0 0 / 0.5)); }
+.burst.hero { font-size: 26px; padding: 26px 52px; letter-spacing: 0.01em; }
+.burst--pow { --burst-fill: var(--pow); color: var(--ink-black); } /* opt-in yellow */
+
+/* --- speech-bubble: contextual labels / dialogue (used sparingly) --- */
+.bubble {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--ink-black);
+  background: var(--ink);
+  padding: 6px 13px;
+  border-radius: 12px;
+  filter: drop-shadow(2px 3px 0 oklch(0% 0 0 / 0.5));
+}
+.bubble::after {
+  content: "";
+  position: absolute; left: 18px; bottom: -8px;
+  border: 7px solid transparent;
+  border-top-color: var(--ink);
+  border-bottom: 0;
+  transform: skewX(-12deg);
+}
+.bubble.accent { background: var(--accent); color: oklch(97% 0.01 25); }
+.bubble.accent::after { border-top-color: var(--accent); }
+
+/* shared focus ring across the whole vocabulary */
+:where(.btn, .btn-ghost, .burst, .card, .row, .file, .search):focus-visible {
+  outline: 3px solid var(--accent-hi);
+  outline-offset: 3px;
+  border-radius: var(--r-s);
+}
+
+/* ============================================================
+   MARQUEE — the landing "placard": the front door that pops
+   ============================================================ */
+
+.marquee {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: var(--z-panel);
+  width: min(460px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 26px 26px 24px;
+  background: linear-gradient(var(--panel), var(--panel-2));
+  border: 3px solid var(--ink-black);
+  border-radius: var(--r-l);
+  box-shadow: 7px 8px 0 oklch(0% 0 0 / 0.55);
+  pointer-events: auto;
+  overflow: hidden;
+}
+/* faint Ben-Day dot texture — the panel reads as printed newsprint, not a
+   flat fill (kept subtle so the red halftone RULE stays the signature mark) */
+.marquee::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, oklch(0% 0 0 / 0.16) 1.1px, transparent 1.4px);
+  background-size: 6px 6px;
+  opacity: 0.5;
+}
+.marquee > * { position: relative; z-index: 1; }
+.marquee .kicker { color: var(--panel-muted); }
+
+.brand {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 6vw, 46px);
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+}
+/* the ONE halftone mark: a red dot-screen rule under the wordmark */
+.halftone-rule {
+  height: 10px;
+  margin-top: -6px;
+  background-image: radial-gradient(circle, var(--accent) 1.7px, transparent 1.9px);
+  background-size: 7px 7px;
+  background-position: 0 0;
+}
+.kicker {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: -4px;
+}
+
+/* NOW READING strip — your shelf is already warm */
+.now-reading {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  background: var(--panel-card);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-m);
+}
+.now-reading .nr-label {
+  grid-column: 1 / -1;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-hi);
+}
+.now-reading .nr-cover {
+  width: 54px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 2px solid var(--ink-black);
+  background: var(--surface-2);
+}
+.now-reading .nr-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.now-reading .nr-series {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.now-reading .nr-issue {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.now-reading .nr-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 3px;
+}
+.now-reading .nr-page {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-hi);
+  white-space: nowrap;
+}
+.now-reading .nr-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: oklch(17% 0.025 25);
+  overflow: hidden;
+}
+.now-reading .nr-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.new-here {
+  padding: 14px;
+  font-size: 13px;
+  color: var(--panel-muted);
+  background: var(--panel-card);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-m);
+}
+.new-here b { color: var(--ink); font-weight: 700; }
+
+.marquee .burst.hero { align-self: stretch; margin: 2px 0; }
+.marquee-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.marquee-actions .file { display: inline-flex; align-items: center; }
+.marquee .error { margin-top: 2px; }
+
+/* ============================================================
+   HUD — the compact working strip (after you start reading)
+   ============================================================ */
+
+.hud {
   position: fixed;
   inset: 0 0 auto 0;
   z-index: var(--z-hud);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px 20px 20px;
+  padding: 14px 18px 18px;
   pointer-events: none;
   background: linear-gradient(oklch(13% 0.01 25 / 0.92), oklch(13% 0.01 25 / 0));
 }
-.controls, .error, .reading { pointer-events: auto; }
+.hud > * { pointer-events: auto; }
+.hud .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.brand {
+/* the PANEL chip re-summons the marquee */
+.panel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 15px;
   letter-spacing: 0.02em;
-  line-height: 1;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-/* the one halftone mark: a red dot-screen underline under the wordmark */
-.brand::after {
-  content: '';
-  width: 74px;
-  height: 10px;
-  align-self: center;
-  background-image: radial-gradient(circle, var(--accent) 1.6px, transparent 1.7px);
-  background-size: 7px 7px;
-  background-position: 0 0;
-  opacity: 0.9;
-}
-.brand span {
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0.01em;
-}
-
-.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-/* shared button vocabulary */
-.controls button,
-.controls .file,
-.library-head button {
-  background: var(--surface);
   color: var(--ink);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 2px solid var(--ink-black);
   border-radius: var(--r-s);
-  padding: 9px 16px;
+  padding: 7px 12px;
   min-height: 40px;
-  font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out),
-    transform 100ms var(--ease-out);
+  box-shadow: 2px 2px 0 var(--ink-black);
+  transition: transform 100ms var(--ease-out), box-shadow 100ms var(--ease-out);
 }
-.controls button:hover:not(:disabled),
-.controls .file:hover,
-.library-head button:hover {
-  background: var(--surface-2);
-  border-color: oklch(38% 0.03 27);
+.panel-chip::after {
+  content: '';
+  width: 22px; height: 8px;
+  background-image: radial-gradient(circle, var(--accent) 1.5px, transparent 1.7px);
+  background-size: 6px 6px;
 }
-.controls button:active:not(:disabled),
-.library-head button:active { transform: translateY(1px); }
-.controls button:disabled { opacity: 0.4; cursor: default; }
-
-.controls .enter {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: oklch(97% 0.01 25);
-}
-.controls .enter:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
-.controls .enter:active:not(:disabled) { background: var(--accent-press); }
-
-.controls .file { display: inline-flex; align-items: center; }
-
-:where(button, .file, .card, .row):focus-visible {
-  outline: 2px solid var(--accent-hi);
-  outline-offset: 2px;
-}
+.panel-chip:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--accent); }
+.panel-chip:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink-black); }
 
 .counter {
-  font-weight: 800;
+  font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
-  min-width: 72px;
+  font-size: 14px;
+  min-width: 68px;
   text-align: center;
   letter-spacing: 0.01em;
+  color: var(--ink);
 }
 
 .reading {
@@ -155,21 +413,47 @@ canvas { display: block; touch-action: none; }
   align-self: flex-start;
 }
 
-/* ---------- Komga library browser ---------- */
+/* first-load choreography — only when motion is welcome; the default
+   (and reduced-motion) render is the fully-visible final state */
+@media (prefers-reduced-motion: no-preference) {
+  .marquee { animation: marquee-in 260ms var(--ease-out) both; }
+  .marquee > * { animation: rise-in 380ms var(--ease-out) both; }
+  .brand { animation-name: stamp-in; }
+  .marquee .halftone-rule { animation-delay: 90ms; }
+  .marquee .kicker { animation-delay: 130ms; }
+  .marquee .now-reading, .marquee .new-here { animation-delay: 180ms; }
+  .marquee .burst.hero { animation-delay: 240ms; }
+  .marquee-actions { animation-delay: 300ms; }
+}
+@keyframes marquee-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes stamp-in {
+  0% { opacity: 0; transform: translateY(-8px) scale(1.04); }
+  70% { opacity: 1; transform: translateY(1px) scale(0.995); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* ---------- Komga library browser (2D slide-over) ---------- */
 
 .library {
   position: fixed;
   top: 118px;
-  left: 20px;
+  left: 24px;
   z-index: var(--z-panel);
-  width: min(460px, calc(100vw - 40px));
+  width: min(460px, calc(100vw - 48px));
   max-height: calc(100vh - 150px);
   overflow-y: auto;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 2px solid var(--ink-black);
   border-radius: var(--r-l);
   padding: 14px;
-  box-shadow: 0 18px 44px oklch(0% 0 0 / 0.5);
+  box-shadow: 6px 7px 0 oklch(0% 0 0 / 0.5);
   animation: panel-in 200ms var(--ease-out);
 }
 @keyframes panel-in {
@@ -183,7 +467,21 @@ canvas { display: block; touch-action: none; }
   gap: 10px;
   margin-bottom: 10px;
 }
-.library-head button { padding: 7px 12px; min-height: 36px; font-size: 13px; }
+.library-head button {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--ink-black);
+  border-radius: var(--r-s);
+  padding: 7px 12px;
+  min-height: 38px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink-black);
+  transition: transform 100ms var(--ease-out), box-shadow 100ms var(--ease-out);
+}
+.library-head button:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--accent); }
+.library-head button:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink-black); }
 .library-title {
   font-family: var(--font-display);
   font-size: 15px;
@@ -203,7 +501,7 @@ canvas { display: block; touch-action: none; }
   margin-bottom: 10px;
   background: var(--bg);
   color: var(--ink);
-  border: 1px solid var(--border);
+  border: 2px solid var(--ink-black);
   border-radius: var(--r-s);
   padding: 9px 12px;
   min-height: 40px;
@@ -211,7 +509,6 @@ canvas { display: block; touch-action: none; }
   font-size: 14px;
 }
 .library .search::placeholder { color: var(--muted); }
-.library .search:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
 
 .library ul { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .library .row {
@@ -274,7 +571,7 @@ canvas { display: block; touch-action: none; }
   flex-direction: column;
   gap: 5px;
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 2px solid var(--ink-black);
   border-radius: var(--r-m);
   padding: 7px;
   cursor: pointer;
@@ -285,11 +582,10 @@ canvas { display: block; touch-action: none; }
 }
 .card:hover {
   transform: translateY(-2px);
-  border-color: var(--accent);
   /* hard offset shadow — pulp print misregistration */
-  box-shadow: 4px 4px 0 oklch(60% 0.215 28 / 0.45);
+  box-shadow: 4px 4px 0 oklch(60% 0.215 28 / 0.55);
 }
-.card:active { transform: translateY(0); box-shadow: 2px 2px 0 oklch(60% 0.215 28 / 0.45); }
+.card:active { transform: translateY(0); box-shadow: 2px 2px 0 oklch(60% 0.215 28 / 0.55); }
 .card img {
   width: 100%;
   height: 114px;
@@ -309,8 +605,10 @@ canvas { display: block; touch-action: none; }
 .card-state { font-size: 10.5px; color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {
-  .library { animation: none; }
+  .library, .marquee, .marquee > * { animation: none; }
   .skel { animation: none; background: var(--surface-2); }
-  .card, .controls button, .library-head button, .library .row { transition: none; }
-  .card:hover, .card:active, .controls button:active { transform: none; }
+  .card, .btn, .btn-ghost, .burst, .panel-chip, .library-head button, .library .row {
+    transition: none;
+  }
+  .card:hover, .card:active, .btn:hover, .btn:active, .burst:hover, .burst:active { transform: none; }
 }
