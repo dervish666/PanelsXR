@@ -1,6 +1,16 @@
 import JSZip from 'jszip'
 
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i
+export const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i
+
+// Pick the image entries from a .cbz's file list and order them the way a reader
+// expects: image files only, natural-sorted so "page2" comes before "page10".
+// Extracted as a pure function so the page-ordering — the regression-prone bit —
+// is unit-testable without a File/JSZip/browser (see cbz.test.ts).
+export function orderCbzImageNames(names: string[]): string[] {
+  return names
+    .filter((name) => IMAGE_RE.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+}
 
 // Dev-only convenience: load a local .cbz (a ZIP of images) so you can read a
 // real comic on the desktop without a server. Komga makes this unnecessary in
@@ -8,12 +18,13 @@ const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i
 export async function loadCbz(file: File): Promise<string[]> {
   const zip = await JSZip.loadAsync(file)
 
-  const entries = Object.values(zip.files)
-    .filter((f) => !f.dir && IMAGE_RE.test(f.name))
-    // Natural sort so "page2" comes before "page10".
-    .sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
-    )
+  const nameOrder = orderCbzImageNames(
+    Object.values(zip.files)
+      .filter((f) => !f.dir)
+      .map((f) => f.name),
+  )
+  const byName = new Map(Object.values(zip.files).map((f) => [f.name, f]))
+  const entries = nameOrder.map((name) => byName.get(name)!)
 
   const urls: string[] = []
   for (const entry of entries) {

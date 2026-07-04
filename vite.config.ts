@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
@@ -18,6 +19,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), ...(useHttps ? [basicSsl()] : [])],
+    // Smoke tests guard the pure, headset-independent logic (Komga URL 1-indexing,
+    // .cbz page ordering). The on-device r3f/XR behaviour (material-recompile keying,
+    // grab-Handle siblings, pose-drag) can't be unit-tested — it's guarded by CLAUDE.md
+    // + the vault's webxr-r3f-patterns note and verified in-headset. `npm run build`
+    // (tsc --noEmit) remains the type/compile gate.
+    test: {
+      environment: 'node',
+      include: ['src/**/*.test.ts'],
+    },
     resolve: {
       // Force a single copy of three. drei's stats-gl and the xr emulator (@iwer/*)
       // pull their own older three versions, which triggers "Multiple instances of
