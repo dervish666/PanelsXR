@@ -6,7 +6,6 @@ import { xrStore } from './xr/store'
 import { Reader } from './scene/Reader'
 import { LibrarySphere } from './scene/LibrarySphere'
 import { VRViewToggle } from './scene/VRViewToggle'
-import { makeSyntheticPages } from './pages/synthetic'
 import { loadCbz } from './pages/cbz'
 import { Library } from './ui/Library'
 import { bookPageUrls, bookThumbUrl, getBook, saveProgress } from './komga/client'
@@ -16,7 +15,10 @@ const LAST_BOOK_KEY = 'panel.lastBookId'
 const SPREAD_KEY = 'panel.spread'
 
 export function App() {
-  const [pages, setPages] = useState<string[]>(() => makeSyntheticPages(20))
+  // No comic until one is opened (resume / library / .cbz) — the landing must
+  // not show a placeholder page behind it, and the Reader only mounts once
+  // there are real pages.
+  const [pages, setPages] = useState<string[]>([])
   const [index, setIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [showLibrary, setShowLibrary] = useState(false)
@@ -148,10 +150,14 @@ export function App() {
     [],
   )
 
+  const hasComic = pages.length > 0
+
   const enterVR = useCallback(() => {
     setChrome('hud')
+    // nothing loaded yet → drop into the 3D library to pick, not an empty reader
+    if (pages.length === 0) setView('sphere')
     void xrStore.enterVR()
-  }, [])
+  }, [pages.length])
 
   const counter =
     visible.length === 2 ? `${visible[0] + 1}–${visible[1] + 1}` : `${visible[0] + 1}`
@@ -160,7 +166,7 @@ export function App() {
   return (
     <>
       {chrome === 'marquee' ? (
-        <div className="marquee">
+        <div className={`marquee${hasComic ? '' : ' landing'}`}>
           <div className="brand">PANEL</div>
           <div className="halftone-rule" />
           <div className="kicker">Komga → WebXR</div>
@@ -196,7 +202,7 @@ export function App() {
             </div>
           )}
 
-          <button className="burst hero" onClick={enterVR}>
+          <button className="btn-vr" onClick={enterVR}>
             ENTER&nbsp;VR
           </button>
 
@@ -262,7 +268,7 @@ export function App() {
               Load .cbz
               <input ref={fileRef} type="file" accept=".cbz,.zip" onChange={onPickCbz} hidden />
             </label>
-            <button className="burst sm" onClick={enterVR}>
+            <button className="btn-vr sm" onClick={enterVR}>
               ENTER&nbsp;VR
             </button>
           </div>
@@ -288,7 +294,7 @@ export function App() {
           <VRViewToggle onToggle={() => setView((v) => (v === 'sphere' ? 'read' : 'sphere'))} />
           {view === 'sphere' ? (
             <LibrarySphere onOpenBook={(b) => openBook(b)} onClose={() => setView('read')} />
-          ) : (
+          ) : hasComic ? (
             <Reader
               pages={pages}
               indices={visible}
@@ -298,7 +304,7 @@ export function App() {
               onToggleSpread={toggleSpread}
               onOpenLibrary={() => setView('sphere')}
             />
-          )}
+          ) : null}
         </XR>
       </Canvas>
     </>

@@ -162,6 +162,44 @@ canvas { display: block; touch-action: none; }
 .burst.hero { font-size: 26px; padding: 26px 52px; letter-spacing: 0.01em; }
 .burst--pow { --burst-fill: var(--pow); color: var(--ink-black); } /* opt-in yellow */
 
+/* --- ENTER VR: bold red hero sticker. Speaks the sticker/placard language
+   (heavy black keyline + hard offset shadow) rather than the jagged burst,
+   so it sits WITH the rest of the site instead of shouting over it. --- */
+.btn-vr {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: oklch(97% 0.01 25);
+  background: var(--accent);
+  border: 3px solid var(--ink-black);
+  border-radius: var(--r-m);
+  padding: 17px 40px;
+  min-height: 56px;
+  cursor: pointer;
+  box-shadow: 5px 5px 0 var(--ink-black);
+  transition: transform 100ms var(--ease-out), box-shadow 100ms var(--ease-out),
+    background 130ms var(--ease-out);
+}
+.btn-vr:hover:not(:disabled) {
+  background: var(--accent-hi);
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--ink-black);
+}
+.btn-vr:active:not(:disabled) {
+  background: var(--accent-press);
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--ink-black);
+}
+.btn-vr.sm {
+  font-size: 14px;
+  padding: 10px 22px;
+  min-height: 40px;
+  border-width: 2px;
+  box-shadow: 3px 3px 0 var(--ink-black);
+}
+.btn-vr.sm:hover:not(:disabled) { box-shadow: 4px 4px 0 var(--ink-black); }
+.marquee .btn-vr { align-self: stretch; margin: 2px 0; }
+
 /* --- speech-bubble: contextual labels / dialogue (used sparingly) --- */
 .bubble {
   position: relative;
@@ -228,6 +266,15 @@ canvas { display: block; touch-action: none; }
 }
 .marquee > * { position: relative; z-index: 1; }
 .marquee .kicker { color: var(--panel-muted); }
+
+/* the standalone landing (no comic loaded, nothing behind it): centre it so it
+   reads as a proper front page, not a widget floating in a corner over a void */
+.marquee.landing {
+  inset: 0;
+  margin: auto;
+  height: max-content;
+  width: min(420px, calc(100vw - 48px));
+}
 
 .brand {
   font-family: var(--font-display);
