@@ -13,26 +13,32 @@ the 2D page fine, but the **Quest browser won't enter VR**. Put Panel behind
 your existing reverse proxy (SWAG / Nginx Proxy Manager / Cloudflare Tunnel) so
 it's served over `https://`. Same story as any WebXR app.
 
-## 🔒 Lock it down before you expose it
+## 🔒 Auth — safe by default
 
-The container **injects your Komga API key** into every `/komga` request, so an
-*unauthenticated* Panel on the public internet is an open proxy to your whole
-library (it bypasses Komga's own auth). Before you put it on a public URL, gate
-it — two independent layers, use either or both:
+The container injects your Komga API key into every `/komga` request (that's what
+keeps the client simple), which also means it **bypasses Komga's own auth** — so
+an ungated Panel is an open proxy to your whole library. To make that impossible
+by accident, **the `/komga` proxy is fail-closed**: it won't serve unless you've
+set a gate. Pick one:
 
-- **Built-in basic auth (portable, recommended).** Set `PANEL_USER` +
-  `PANEL_PASSWORD` and the whole app (and the Komga proxy) sits behind an HTTP
-  basic-auth login. The browser caches it, so it's a **one-time** login in the
-  Quest — no monthly re-auth. Works for anyone, no Cloudflare needed. The
-  password is hashed at container start (never stored in plaintext).
-- **Edge auth (Cloudflare Access / reverse-proxy SSO).** If you front Panel with
-  a Cloudflare Tunnel, add a CF Access policy on the hostname for SSO-grade
-  gating at the edge. Great as a personal outer layer; note CF Access sessions
-  expire periodically, which is why basic auth is nicer for the actual reading.
+- **Set a password (recommended).** `PANEL_PASSWORD` (+ optional `PANEL_USER`,
+  default `panel`) locks the whole app + proxy behind a login. The Quest browser
+  caches it, so it's a **one-time** login — no repeated re-auth. Works anywhere,
+  no Cloudflare needed; the password is bcrypt-hashed at container start. **Set it
+  before first run** (it's a template field).
+- **Gate it upstream, then set `PANEL_AUTH=none`.** If Panel is LAN-only or sits
+  behind a reverse-proxy SSO (Cloudflare Access, Authelia, Authentik, Tinyauth…),
+  set `PANEL_AUTH=none` to skip the built-in login. This serves your whole library
+  to anyone who reaches the URL, so use it *only* when access is genuinely handled
+  elsewhere — and make sure Panel is reachable **only** via that proxy.
+- **Set nothing → fail-closed.** With no password and no `PANEL_AUTH=none`, the app
+  loads but `/komga` returns `503` until you pick one of the above. Panel won't
+  become an open proxy on its own.
 
-**Least privilege (do this too):** give Panel a **dedicated Komga user** with
-read-only access to just the libraries you want in VR, and use *that* user's API
-key — so even a worst case only exposes that limited view, not your whole account.
+**Least privilege (do this regardless):** give Panel a **dedicated read-only Komga
+user** and use *that* user's API key. The injected key bypasses Komga's auth, so a
+full-access key behind one password is one leak from total account compromise; a
+read-only key caps the worst case to "someone saw my comics."
 
 ## What you need
 
