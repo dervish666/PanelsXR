@@ -38,14 +38,26 @@ interface SphereItem {
   onSelect: () => void
 }
 
-// Distribute items on a band of a sphere around the user: full 360° azimuth,
-// elevation from a little below eye level to comfortably above — centred on
-// the horizon so the band is in view without craning.
+// Distribute the covers around the user, WEIGHTED TOWARD THE FRONT so there's
+// always something in view when a level opens. Item 0 sits dead ahead (−Z) and
+// the rest fan out right/left, so a handful of titles gather in front and only
+// larger sets spread to the sides and wrap behind. Azimuth spacing tightens as
+// the count grows, so once a set is big enough (~16+) it fills the whole ring
+// like before; the elevation band widens from a compact eye-level cluster to
+// the full dome on the same schedule. Deterministic per index (a re-entered
+// letter lands its covers in the same spots — no reshuffle).
+const AZ_STEP = 0.4 // neighbour spacing (rad, ~23°) when there's room to spread
+const GOLDEN_FRAC = 0.6180339887 // low-discrepancy elevation order → no stripes
 function bandPosition(i: number, n: number): THREE.Vector3 {
-  const golden = Math.PI * (3 - Math.sqrt(5))
-  const t = n === 1 ? 0.5 : i / (n - 1)
-  const elevation = THREE.MathUtils.lerp(-0.45, 0.9, t) // radians above horizon
-  const azimuth = i * golden
+  const step = Math.min(AZ_STEP, (2 * Math.PI) / Math.max(n, 1))
+  // centre the whole set on the front (−Z): the middle item sits dead ahead and
+  // the rest straddle it symmetrically in alphabetical order, left → right.
+  const azimuth = (i - (n - 1) / 2) * step
+  const fill = Math.min(1, (n * AZ_STEP) / (2 * Math.PI)) // few → 0, fills ring → 1
+  const eLo = THREE.MathUtils.lerp(-0.12, -0.45, fill)
+  const eHi = THREE.MathUtils.lerp(0.34, 0.9, fill)
+  const et = (0.5 + i * GOLDEN_FRAC) % 1
+  const elevation = THREE.MathUtils.lerp(eLo, eHi, et)
   return new THREE.Vector3(
     RADIUS * Math.cos(elevation) * Math.sin(azimuth),
     HEAD + RADIUS * Math.sin(elevation),
