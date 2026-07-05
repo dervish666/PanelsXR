@@ -9,3 +9,6 @@ dist-ssr
 
 # Local tool caches
 .impeccable/
+
+# local Claude Code project guidance — not for the public repo
+CLAUDE.md
