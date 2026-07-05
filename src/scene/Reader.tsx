@@ -13,6 +13,7 @@ import { Group, Matrix4, Vector3 } from 'three'
 import { PageSurface } from './PageSurface'
 import type { PageAmbience } from './PageSurface'
 import { XRPageInput } from './XRPageInput'
+import { XRHandPageInput } from './XRHandPageInput'
 import { UIButton } from './UIButton'
 import { Slider3D } from './Slider3D'
 import { exitVR } from '../xr/store'
@@ -27,6 +28,7 @@ export interface ReaderProps {
   onOpenLibrary: () => void
   curve: number // 0 = flat … 1 = full bend toward the viewer
   onCurveChange: (v: number) => void
+  handGestures: boolean // wave-to-turn-page (Quest hand tracking)
 }
 
 // Where the page sits when you enter VR / on desktop.
@@ -170,6 +172,7 @@ export function Reader({
   onOpenLibrary,
   curve,
   onCurveChange,
+  handGestures,
 }: ReaderProps) {
   const inXR = useXR((s) => s.session != null)
   const pageRef = useRef<Group>(null)
@@ -238,6 +241,7 @@ export function Reader({
       )}
 
       <XRPageInput onNext={onNext} onPrev={onPrev} />
+      <XRHandPageInput onNext={onNext} onPrev={onPrev} enabled={handGestures} />
 
       {inXR ? (
         <VRMovement pageRef={pageRef} originRef={originRef} />

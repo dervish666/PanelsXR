@@ -14,6 +14,7 @@ import type { KomgaBook } from './komga/types'
 const LAST_BOOK_KEY = 'panel.lastBookId'
 const SPREAD_KEY = 'panel.spread'
 const CURVE_KEY = 'panel.curve'
+const HANDS_KEY = 'panel.handGestures'
 
 export function App() {
   // No comic until one is opened (resume / library / .cbz) — the landing must
@@ -41,6 +42,21 @@ export function App() {
     localStorage.setItem(CURVE_KEY, String(c))
     setCurveState(c)
   }, [])
+
+  // wave-a-hand-to-turn-the-page (Quest hand tracking) — default on; toggle here
+  // in case it's too eager, without taking the headset off first isn't possible,
+  // so it lives on the HUD you set before entering VR.
+  const [handGestures, setHandGestures] = useState(
+    () => localStorage.getItem(HANDS_KEY) !== '0',
+  )
+  const toggleHands = useCallback(
+    () =>
+      setHandGestures((v) => {
+        localStorage.setItem(HANDS_KEY, v ? '0' : '1')
+        return !v
+      }),
+    [],
+  )
 
   // Spread pairing: the cover stands alone, then pages pair 2-3, 4-5, …
   // (0-indexed: [0], [1,2], [3,4] …). `pairStart` maps any index to its pair.
@@ -278,6 +294,13 @@ export function App() {
               />
               <span className="curve-val">{Math.round(curve * 100)}%</span>
             </label>
+            <button
+              className={`btn-ghost sm${handGestures ? ' on' : ''}`}
+              onClick={toggleHands}
+              title="Turn pages by waving a hand across the page (Quest hand tracking)"
+            >
+              Hands {handGestures ? 'on' : 'off'}
+            </button>
             <button className="btn sm" onClick={() => setShowLibrary((v) => !v)}>
               Library
             </button>
@@ -328,6 +351,7 @@ export function App() {
               onOpenLibrary={() => setView('sphere')}
               curve={curve}
               onCurveChange={setCurve}
+              handGestures={handGestures}
             />
           ) : null}
         </XR>

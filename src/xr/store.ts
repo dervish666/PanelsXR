@@ -11,6 +11,10 @@ import { createXRStore } from '@react-three/xr'
 //    browser still gets a genuine immersive-vr session.
 export const xrStore = createXRStore({
   foveation: 0,
+  // Quest hand tracking, for the wave-to-turn-the-page gesture. It's in v6's
+  // default optional features already; requested explicitly so the dependency
+  // is visible (optional, so controllers-only sessions are unaffected).
+  handTracking: true,
 })
 
 // End the immersive session and drop back to the 2D browser.

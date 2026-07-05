@@ -124,6 +124,9 @@ canvas { display: block; touch-action: none; }
 .btn-ghost:disabled { opacity: 0.35; cursor: default; }
 .btn-ghost.sm { min-height: 38px; padding: 7px 12px; font-size: 12px; }
 .btn-ghost.icon { padding: 10px 14px; }
+/* an active/on ghost toggle picks up the accent so its state reads at a glance */
+.btn-ghost.on { color: var(--ink); border-color: var(--accent); }
+.btn-ghost.on:hover:not(:disabled) { border-color: var(--accent-hi); }
 
 /* --- comic action-starburst: the hero + primary-CTA treatment --- */
 .burst {
