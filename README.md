@@ -1,62 +1,78 @@
 # Panel — WebXR comic reader for Komga
 
-A browser-based WebXR reader that (from v1) streams a self-hosted **Komga**
-library straight into a VR headset. Put the headset on, it opens where you left
-off on the iPad, pages turn on the thumbstick, text stays readable. Runs in the
-Quest browser — no store, no native build, no sideload.
+Panel streams a self-hosted [**Komga**](https://komga.org) comic library straight
+into a Meta Quest 3 headset. Put the headset on and it opens where you left off on
+the iPad; browse your whole library as a wall of floating covers; turn pages on
+the thumbstick. It runs in the Quest browser — no store, no native build, no
+sideload — and self-hosts as a single Docker container next to Komga.
 
-## Status: v0 — "the reading surface"
+> **Status:** v0.1.0 — first shipped release. Single-user / family focused, young
+> but real. See [CHANGELOG.md](CHANGELOG.md).
 
-The reading experience, with a deliberately dumb page source so we can tune
-comfort and controls before touching auth/CORS.
+## Features
 
-- Enter-VR button; works on **desktop** (mouse/keyboard) **and in headset**.
-- A page surface floating at a comfortable size/distance.
-- **Thumbstick L/R** (or **A/B**) turns pages in VR; **arrow keys** on desktop.
-- Next/prev pages are **preloaded**; off-window textures are **disposed**.
-- Page source: **20 synthetic test pages** out of the box, or **load a local
-  `.cbz`** (a ZIP of images) via the button — no server needed.
+- **Auto-resume** — reopens your last book fresh from Komga on load, so progress
+  read anywhere (e.g. the iPad) carries over with zero clicks. Read-progress syncs
+  back on every page turn.
+- **A 3D library** — browse the whole collection as an **A–Z "Alphabet Shelf"**:
+  letter stacks sized by how much you have under each, pick a letter to be
+  surrounded by its series, drill into a series' issues, page through big sets.
+  Plus a **Recent** mode (continue-reading + on-deck) and a flat 2D browser.
+- **A comfortable reader** — the page composited crisp on a plane with a backing
+  board + paper stack so it reads as a physical object; single-page and two-page
+  spreads; grab-to-move, two-handed resize, stick locomotion, recenter.
+- **Comic-shop-pulp look** — warm-black palette, one pulp-red accent, chunky
+  display type, halftone and hard-offset "misregistration" shadows.
 
-Not in v0 (coming next): Komga browse + auth, WebXR Layers for crisp text,
-read-progress sync. See the roadmap in the kickoff brief.
+## Self-hosting (Docker)
 
-## Running it
+Panel ships as one container: the static app + a Caddy proxy that talks to your
+Komga with the API key injected server-side (so the browser never sees it).
+
+```bash
+docker run -d --name panel -p 8677:80 \
+  -e KOMGA_URL="http://192.168.1.10:8080" \
+  -e KOMGA_API_KEY="your-read-only-komga-key" \
+  -e PANEL_PASSWORD="a-strong-password" \
+  --restart unless-stopped \
+  dervish/panelsxr:latest
+```
+
+**Two things to get right:**
+
+1. **WebXR needs HTTPS.** A plain `http://…:8677` loads the 2D page but the Quest
+   won't enter VR — front Panel with a reverse proxy / tunnel (SWAG, Nginx Proxy
+   Manager, Cloudflare Tunnel) so it's served over `https://`.
+2. **Gate it.** The proxy injects your Komga key, so an ungated public Panel is an
+   open proxy to your library. Panel is **fail-closed**: it won't serve `/komga`
+   unless you set `PANEL_PASSWORD` (built-in login, cached one-time by the Quest)
+   or explicitly `PANEL_AUTH=none` (LAN-only / gated upstream). Use a **dedicated
+   read-only Komga user's** key to cap the blast radius.
+
+Full guide, env reference, and an **Unraid Community Applications** template:
+[`deploy/unraid/`](deploy/unraid/).
+
+## Development
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173  (desktop iteration loop)
+npm run dev          # http://localhost:5173 — desktop iteration
+npm run dev:quest    # HTTPS on the LAN for a real headset (self-signed)
+npm run build        # tsc --noEmit && vite build
+npm test             # vitest — headset-independent logic
 ```
 
-### On the Quest
-
-`adb` isn't set up on this machine, so use the LAN + HTTPS path (WebXR needs a
-secure context, and the Quest reaches this box over the network):
-
-```bash
-npm run dev:quest    # serves over HTTPS on the LAN (self-signed cert)
-```
-
-Then browse to `https://<your-mac-lan-ip>:5173` on the Quest and accept the
-certificate warning. On the desktop, the "Enter VR" button uses an emulated
-Quest 3 so you can smoke-test the VR path without hardware.
+On localhost with no WebXR, `@react-three/xr` v6 auto-activates an emulated Quest
+3 (IWER), so `Enter VR` gives a real emulated session on desktop. Set your Komga
+connection in `.env.local` (copy `.env.example`); the dev server proxies
+`/komga/*` and injects the key, same as the container.
 
 ## Tech
 
-Vite + React + TypeScript · three.js · @react-three/fiber · @react-three/xr
-(v6, `createXRStore`) · @react-three/drei · JSZip (dev-only local `.cbz`).
+Vite + React 19 + TypeScript · three.js · @react-three/fiber · @react-three/xr v6
+(`createXRStore`, `XRLayer`, controller state) · @react-three/handle · drei ·
+JSZip (dev-only `.cbz`). Container: multi-stage build → Caddy. Node 22.
 
-## Layout
+## License
 
-```
-src/
-  main.tsx            app entry
-  App.tsx             XR store, HUD, page state, keyboard fallback
-  xr/store.ts         createXRStore config (foveation, floor space, desktop emulate)
-  scene/
-    Reader.tsx        the reading scene (surface + input + desktop orbit)
-    PageSurface.tsx   textured plane; preload window + texture disposal
-    XRPageInput.tsx   thumbstick / A-B page turning with edge detection
-  pages/
-    synthetic.ts      canvas-drawn placeholder pages (default source)
-    cbz.ts            local .cbz loader (JSZip) — dev convenience
-```
+MIT.

@@ -56,5 +56,5 @@ self-hosted [Komga](https://komga.org) library into a Meta Quest 3 headset.
   `PANEL_AUTH=none` (LAN-only / upstream-gated). No accidental open proxy.
 - Unraid Community Applications template + self-hosting docs.
 
-[Unreleased]: https://github.com/dervish/panelsxr/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/dervish/panelsxr/releases/tag/v0.1.0
+[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.1.0
