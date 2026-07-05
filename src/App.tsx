@@ -13,6 +13,7 @@ import type { KomgaBook } from './komga/types'
 
 const LAST_BOOK_KEY = 'panel.lastBookId'
 const SPREAD_KEY = 'panel.spread'
+const CURVE_KEY = 'panel.curve'
 
 export function App() {
   // No comic until one is opened (resume / library / .cbz) — the landing must
@@ -29,7 +30,17 @@ export function App() {
   const [chrome, setChrome] = useState<'marquee' | 'hud'>('marquee')
   const [book, setBook] = useState<KomgaBook | null>(null)
   const [spread, setSpread] = useState(() => localStorage.getItem(SPREAD_KEY) === '1')
+  const [curve, setCurveState] = useState(() => {
+    const v = parseFloat(localStorage.getItem(CURVE_KEY) ?? '0')
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0
+  })
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const setCurve = useCallback((v: number) => {
+    const c = Math.max(0, Math.min(1, v))
+    localStorage.setItem(CURVE_KEY, String(c))
+    setCurveState(c)
+  }, [])
 
   // Spread pairing: the cover stands alone, then pages pair 2-3, 4-5, …
   // (0-indexed: [0], [1,2], [3,4] …). `pairStart` maps any index to its pair.
@@ -255,6 +266,18 @@ export function App() {
             <button className="btn-ghost sm" onClick={toggleSpread}>
               {spread ? 'Single' : 'Two-page'}
             </button>
+            <label className="curve-ctl" title="Bend the page toward you so the far edges come closer (best in VR)">
+              Curve
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={curve}
+                onChange={(e) => setCurve(parseFloat(e.target.value))}
+              />
+              <span className="curve-val">{Math.round(curve * 100)}%</span>
+            </label>
             <button className="btn sm" onClick={() => setShowLibrary((v) => !v)}>
               Library
             </button>
@@ -303,6 +326,8 @@ export function App() {
               spread={spread}
               onToggleSpread={toggleSpread}
               onOpenLibrary={() => setView('sphere')}
+              curve={curve}
+              onCurveChange={setCurve}
             />
           ) : null}
         </XR>

@@ -7,6 +7,52 @@ import * as THREE from 'three'
 const WINDOW = 2
 const PAGE_HEIGHT = 1.5
 const SPREAD_GAP = 0.012 // slim gutter between pages in spread mode
+const CURVE_SEG = 48 // horizontal subdivisions for a smooth bend
+const PHI_MAX = 1.4 // rad — the full arc angle across the page at curve = 1 (~80°)
+
+// Build a plane slice [xStart, xEnd] (in the surround's global x, so a two-page
+// spread lands on ONE continuous arc) displaced onto a vertical cylinder that
+// curves the far edges TOWARD the viewer (+z). radius = null → flat. UVs run
+// 0..1 across the slice so the page texture maps normally.
+function curvedSlice(
+  xStart: number,
+  xEnd: number,
+  height: number,
+  radius: number | null,
+): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry()
+  const cols = CURVE_SEG + 1
+  const pos: number[] = []
+  const uv: number[] = []
+  const idx: number[] = []
+  for (let r = 0; r < 2; r++) {
+    const y = (0.5 - r) * height // r=0 top (+h/2), r=1 bottom (-h/2)
+    for (let c = 0; c < cols; c++) {
+      const t = c / CURVE_SEG
+      const x = xStart + (xEnd - xStart) * t
+      let px = x
+      let pz = 0
+      if (radius) {
+        const theta = x / radius
+        px = radius * Math.sin(theta)
+        pz = radius * (1 - Math.cos(theta)) // 0 at centre, >0 (toward viewer) at edges
+      }
+      pos.push(px, y, pz)
+      uv.push(t, 1 - r)
+    }
+  }
+  for (let c = 0; c < CURVE_SEG; c++) {
+    const a = c
+    const b = c + 1
+    const d = cols + c
+    const e = cols + c + 1
+    idx.push(a, d, b, b, d, e)
+  }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  g.setIndex(idx)
+  return g
+}
 
 function makeTexture(img: HTMLImageElement): THREE.Texture {
   const tex = new THREE.Texture(img)
@@ -96,6 +142,7 @@ function makeAmbience(img: HTMLImageElement): PageAmbience {
 export interface PageSurfaceProps {
   urls: string[]
   indices: number[] // 1 page (single) or 2 (spread), ascending
+  curve?: number // 0 = flat, 1 = full bend toward the viewer at the edges
   onAmbience?: (a: PageAmbience) => void
 }
 
@@ -104,7 +151,7 @@ export interface PageSurfaceProps {
 // IWER emulator only because IWER lacks layer support and silently used the
 // mesh fallback). Needs a dedicated on-device debugging session — see the
 // project note. The plain mesh below is the proven-readable path.
-export function PageSurface({ urls, indices, onAmbience }: PageSurfaceProps) {
+export function PageSurface({ urls, indices, curve = 0, onAmbience }: PageSurfaceProps) {
   const { gl } = useThree()
   const maxAnisotropy = useMemo(() => gl.capabilities.getMaxAnisotropy(), [gl])
   const cache = useRef<Map<number, THREE.Texture>>(new Map())
@@ -193,16 +240,40 @@ export function PageSurface({ urls, indices, onAmbience }: PageSurfaceProps) {
   const totalWidth =
     pages.reduce((sum, p) => sum + p.width, 0) + SPREAD_GAP * (pages.length - 1)
 
+  // Curve geometry: one cylinder arc shared across the whole surface (so a
+  // spread bends as a single sheet). Each page + the backing board get a slice
+  // of that arc; rebuilt only when the layout or curve changes (not per texture
+  // load), and disposed to keep Quest VRAM honest.
+  const widthKey = pages.map((p) => p.width.toFixed(3)).join(',')
+  const geomRef = useRef<THREE.BufferGeometry[]>([])
+  const { pageGeoms, boardGeom } = useMemo(() => {
+    geomRef.current.forEach((g) => g.dispose())
+    const radius = curve > 0.001 ? totalWidth / (curve * PHI_MAX) : null
+    let x = -totalWidth / 2
+    const pageGeoms = pages.map((p) => {
+      const g = curvedSlice(x, x + p.width, PAGE_HEIGHT, radius)
+      x += p.width + SPREAD_GAP
+      return g
+    })
+    const bw = totalWidth + 0.06
+    const boardGeom = curvedSlice(-bw / 2, bw / 2, PAGE_HEIGHT + 0.06, radius)
+    geomRef.current = [...pageGeoms, boardGeom]
+    return { pageGeoms, boardGeom }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widthKey, curve])
+  useEffect(() => () => geomRef.current.forEach((g) => g.dispose()), [])
+
   // Physical presence: a paper stack + backing board behind the page. In VR
   // this is real geometry, so stereo + head tracking give genuine depth — the
-  // comic reads as an object, not a floating poster.
+  // comic reads as an object, not a floating poster. (The thin stack stays flat
+  // behind the curved board — it never pokes through, and the difference is
+  // invisible at any comfortable curve.)
   const stack = [
     { z: -0.006, s: 0.995, rot: 0.004, color: '#d9d2c3' },
     { z: -0.012, s: 0.988, rot: -0.007, color: '#c8c1b1' },
     { z: -0.018, s: 0.98, rot: 0.01, color: '#b5ae9f' },
   ]
 
-  let x = -totalWidth / 2
   return (
     <group>
       {stack.map((l) => (
@@ -211,29 +282,24 @@ export function PageSurface({ urls, indices, onAmbience }: PageSurfaceProps) {
           <meshBasicMaterial color={l.color} toneMapped={false} />
         </mesh>
       ))}
-      <mesh position={[0, 0, -0.03]}>
-        <planeGeometry args={[totalWidth + 0.06, PAGE_HEIGHT + 0.06]} />
-        <meshBasicMaterial color="#1a1411" toneMapped={false} />
+      <mesh position={[0, 0, -0.03]} geometry={boardGeom}>
+        <meshBasicMaterial color="#1a1411" toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
-      {pages.map((p) => {
-        const cx = x + p.width / 2
-        x += p.width + SPREAD_GAP
-        return (
-          <mesh key={p.i} position={[cx, 0, 0]}>
-            <planeGeometry args={[p.width, PAGE_HEIGHT]} />
-            {/* key on the texture so the material remounts (and its shader
-                recompiles with USE_MAP) when the page changes — otherwise a map
-                added after the first compile is silently ignored and the plane
-                renders flat white. */}
-            <meshBasicMaterial
-              key={p.tex ? p.tex.uuid : 'placeholder'}
-              map={p.tex}
-              color={p.tex ? '#ffffff' : '#1a1a22'}
-              toneMapped={false}
-            />
-          </mesh>
-        )
-      })}
+      {pages.map((p, k) => (
+        <mesh key={p.i} geometry={pageGeoms[k]}>
+          {/* key on the texture so the material remounts (and its shader
+              recompiles with USE_MAP) when the page changes — otherwise a map
+              added after the first compile is silently ignored and the plane
+              renders flat white. */}
+          <meshBasicMaterial
+            key={p.tex ? p.tex.uuid : 'placeholder'}
+            map={p.tex}
+            color={p.tex ? '#ffffff' : '#1a1a22'}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
     </group>
   )
 }

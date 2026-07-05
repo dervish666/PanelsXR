@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, Text } from '@react-three/drei'
 import { Handle } from '@react-three/handle'
 import {
   XROrigin,
@@ -23,7 +23,11 @@ export interface ReaderProps {
   spread: boolean
   onToggleSpread: () => void
   onOpenLibrary: () => void
+  curve: number // 0 = flat … 1 = full bend toward the viewer
+  onCurveChange: (v: number) => void
 }
+
+const CURVE_STEP = 0.1
 
 // Where the page sits when you enter VR / on desktop.
 const INITIAL_PAGE_POS: [number, number, number] = [0, 1.35, -1.6]
@@ -114,15 +118,19 @@ export function Reader({
   spread,
   onToggleSpread,
   onOpenLibrary,
+  curve,
+  onCurveChange,
 }: ReaderProps) {
   const inXR = useXR((s) => s.session != null)
   const pageRef = useRef<Group>(null)
   const originRef = useRef<Group>(null)
   const [ambience, setAmbience] = useState<PageAmbience | null>(null)
 
+  const clampCurve = (v: number) => Math.max(0, Math.min(1, Math.round(v * 100) / 100))
+
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
-      <PageSurface urls={pages} indices={indices} onAmbience={setAmbience} />
+      <PageSurface urls={pages} indices={indices} curve={curve} onAmbience={setAmbience} />
     </group>
   )
 
@@ -160,6 +168,31 @@ export function Reader({
             onClick={onOpenLibrary}
           />
           <UIButton position={[0.71, 0, 0]} width={0.3} label="Exit VR" onClick={exitVR} />
+          {/* second row: bend the page toward you so the far edges come closer */}
+          <UIButton
+            position={[-0.2, -0.15, 0]}
+            width={0.26}
+            label="Curve −"
+            onClick={() => onCurveChange(clampCurve(curve - CURVE_STEP))}
+          />
+          <Text
+            raycast={() => null}
+            position={[0.02, -0.15, 0.004]}
+            fontSize={0.05}
+            anchorX="center"
+            anchorY="middle"
+            color="#f2eeea"
+            outlineWidth={0.003}
+            outlineColor="#141010"
+          >
+            {`Curve ${Math.round(curve * 100)}%`}
+          </Text>
+          <UIButton
+            position={[0.24, -0.15, 0]}
+            width={0.26}
+            label="Curve +"
+            onClick={() => onCurveChange(clampCurve(curve + CURVE_STEP))}
+          />
         </ControlBar>
       )}
 
