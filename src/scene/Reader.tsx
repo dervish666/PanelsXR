@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import { Handle } from '@react-three/handle'
@@ -8,11 +8,13 @@ import {
   useXRControllerLocomotion,
   useXRInputSourceState,
 } from '@react-three/xr'
+import * as THREE from 'three'
 import { Group, Matrix4, Vector3 } from 'three'
 import { PageSurface } from './PageSurface'
 import type { PageAmbience } from './PageSurface'
 import { XRPageInput } from './XRPageInput'
 import { UIButton } from './UIButton'
+import { Slider3D } from './Slider3D'
 import { exitVR } from '../xr/store'
 
 export interface ReaderProps {
@@ -26,8 +28,6 @@ export interface ReaderProps {
   curve: number // 0 = flat … 1 = full bend toward the viewer
   onCurveChange: (v: number) => void
 }
-
-const CURVE_STEP = 0.1
 
 // Where the page sits when you enter VR / on desktop.
 const INITIAL_PAGE_POS: [number, number, number] = [0, 1.35, -1.6]
@@ -56,6 +56,56 @@ function ControlBar({
     m.current.decompose(bar.position, bar.quaternion, bar.scale)
   })
   return <group ref={barRef}>{children}</group>
+}
+
+// A rounded-rect shape centred on the origin — the base for the control tray.
+function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
+  const s = new THREE.Shape()
+  const x = -w / 2
+  const y = -h / 2
+  s.moveTo(x + r, y)
+  s.lineTo(x + w - r, y)
+  s.quadraticCurveTo(x + w, y, x + w, y + r)
+  s.lineTo(x + w, y + h - r)
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  s.lineTo(x + r, y + h)
+  s.quadraticCurveTo(x, y + h, x, y + h - r)
+  s.lineTo(x, y + r)
+  s.quadraticCurveTo(x, y, x + r, y)
+  return s
+}
+
+// The control tray: a rounded dark plate with a black keyline and a hard-offset
+// shadow — the 3D twin of the front-screen placard, so the in-VR controls read
+// as part of the same app.
+function Tray({ width, height }: { width: number; height: number }) {
+  const geoms = useMemo(() => {
+    const surf = new THREE.ShapeGeometry(roundedRectShape(width, height, 0.035))
+    const key = new THREE.ShapeGeometry(roundedRectShape(width + 0.024, height + 0.024, 0.04))
+    const shadow = new THREE.ShapeGeometry(roundedRectShape(width, height, 0.035))
+    return { surf, key, shadow }
+  }, [width, height])
+  useEffect(
+    () => () => {
+      geoms.surf.dispose()
+      geoms.key.dispose()
+      geoms.shadow.dispose()
+    },
+    [geoms],
+  )
+  return (
+    <group>
+      <mesh geometry={geoms.shadow} position={[0.022, -0.022, -0.028]}>
+        <meshBasicMaterial color="#120d0b" toneMapped={false} />
+      </mesh>
+      <mesh geometry={geoms.key} position={[0, 0, -0.024]}>
+        <meshBasicMaterial color="#120d0b" toneMapped={false} />
+      </mesh>
+      <mesh geometry={geoms.surf} position={[0, 0, -0.02]}>
+        <meshBasicMaterial color="#2a2320" toneMapped={false} />
+      </mesh>
+    </group>
+  )
 }
 
 // Left-stick smooth locomotion + a left-X recenter. Right stick stays free for
@@ -126,8 +176,6 @@ export function Reader({
   const originRef = useRef<Group>(null)
   const [ambience, setAmbience] = useState<PageAmbience | null>(null)
 
-  const clampCurve = (v: number) => Math.max(0, Math.min(1, Math.round(v * 100) / 100))
-
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
       <PageSurface urls={pages} indices={indices} curve={curve} onAmbience={setAmbience} />
@@ -152,47 +200,40 @@ export function Reader({
 
       {inXR && (
         <ControlBar pageRef={pageRef}>
-          <UIButton position={[-0.72, 0, 0]} width={0.26} label="‹ Prev" onClick={onPrev} />
-          <UIButton position={[-0.42, 0, 0]} width={0.26} label="Next ›" onClick={onNext} />
+          <Tray width={1.74} height={0.44} />
+          {/* row 1 — paging + modes */}
+          <UIButton position={[-0.61, 0.1, 0]} width={0.24} label="‹ Prev" onClick={onPrev} />
+          <UIButton position={[-0.35, 0.1, 0]} width={0.24} label="Next ›" onClick={onNext} />
           <UIButton
-            position={[-0.03, 0, 0]}
-            width={0.42}
-            label={spread ? 'Single page' : 'Two-page'}
+            position={[-0.04, 0.1, 0]}
+            width={0.34}
+            label={spread ? 'Single' : 'Two-page'}
             onClick={onToggleSpread}
           />
-          <UIButton
-            position={[0.36, 0, 0]}
-            width={0.3}
-            label="Library"
-            accent
-            onClick={onOpenLibrary}
-          />
-          <UIButton position={[0.71, 0, 0]} width={0.3} label="Exit VR" onClick={exitVR} />
-          {/* second row: bend the page toward you so the far edges come closer */}
-          <UIButton
-            position={[-0.2, -0.15, 0]}
-            width={0.26}
-            label="Curve −"
-            onClick={() => onCurveChange(clampCurve(curve - CURVE_STEP))}
-          />
+          <UIButton position={[0.29, 0.1, 0]} width={0.28} label="Library" accent onClick={onOpenLibrary} />
+          <UIButton position={[0.59, 0.1, 0]} width={0.28} label="Exit VR" onClick={exitVR} />
+          {/* row 2 — curve comfort slider */}
           <Text
             raycast={() => null}
-            position={[0.02, -0.15, 0.004]}
-            fontSize={0.05}
-            anchorX="center"
+            position={[-0.68, -0.11, 0.004]}
+            fontSize={0.045}
+            anchorX="left"
+            anchorY="middle"
+            color="#c9beb8"
+          >
+            Curve
+          </Text>
+          <Slider3D position={[0.04, -0.11, 0]} width={0.82} value={curve} onChange={onCurveChange} />
+          <Text
+            raycast={() => null}
+            position={[0.56, -0.11, 0.004]}
+            fontSize={0.045}
+            anchorX="left"
             anchorY="middle"
             color="#f2eeea"
-            outlineWidth={0.003}
-            outlineColor="#141010"
           >
-            {`Curve ${Math.round(curve * 100)}%`}
+            {`${Math.round(curve * 100)}%`}
           </Text>
-          <UIButton
-            position={[0.24, -0.15, 0]}
-            width={0.26}
-            label="Curve +"
-            onClick={() => onCurveChange(clampCurve(curve + CURVE_STEP))}
-          />
         </ControlBar>
       )}
 
