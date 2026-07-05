@@ -10,6 +10,30 @@ _Parked / on the roadmap: per-user Komga login (cookie-passthrough), built-in
 HTTPS (`PANEL_DOMAIN` real-cert / `PANEL_TLS=internal`), forward-auth mode for
 Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 
+## [0.2.0] — 2026-07-05
+
+The reading-experience release — page comfort, in-VR controls, and hands-free
+paging, all tuned on the real headset.
+
+### Added
+- **Adjustable page curve** — bend the page toward you (like a curved monitor)
+  so the far edges come closer and stay readable. A slider on the flat page; the
+  amount persists. A two-page spread bends as one continuous sheet.
+- **Hand mode (Quest hand tracking)** — a "Hands" toggle that turns on:
+  - **Three-zone page tap** (the comic-reader standard): tap the page's left
+    third to go back, right third to go forward, middle to show/hide the
+    controls. Works with a controller trigger or a hand pinch.
+  - **Wave to turn the page** — wave a hand across the page (right-to-left
+    advances). Off by default; opt in from the HUD.
+- Icon and MIT `LICENSE` for the Community Applications listing.
+
+### Changed
+- **Redesigned the in-VR control bar** to match the app: a rounded tray plate
+  with the placard's keyline + hard-offset shadow, sticker-style buttons, and a
+  3D slider for curve.
+- Controller mode (Hands off) is untouched — trigger-hold grabs/moves/resizes
+  the page and the thumbstick / A-B buttons page, exactly as before.
+
 ## [0.1.0] — 2026-07-05
 
 First shipped release — a self-hostable WebXR comic reader that streams a
@@ -56,5 +80,6 @@ self-hosted [Komga](https://komga.org) library into a Meta Quest 3 headset.
   `PANEL_AUTH=none` (LAN-only / upstream-gated). No accidental open proxy.
 - Unraid Community Applications template + self-hosting docs.
 
-[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.1.0

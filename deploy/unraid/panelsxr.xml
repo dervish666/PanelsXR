@@ -1,7 +1,6 @@
 <?xml version="1.0"?>
 <!-- Unraid Community Applications template for Panel.
-     Remaining before CA submission: add a real Icon URL (a committed icon asset)
-     and confirm the host port, then feed this to https://ca.unraid.net/submit —
+     Confirm the host port, then feed this to https://ca.unraid.net/submit —
      its live scan validates the XML + ca_profile.xml and previews the listing. -->
 <Container version="2">
   <Name>PanelsXR</Name>
@@ -19,7 +18,7 @@ Set KOMGA_URL to your Komga address and KOMGA_API_KEY to a Komga API key (Komga,
 IMPORTANT: WebXR needs HTTPS. Access this behind a reverse proxy (SWAG / Nginx Proxy Manager / Cloudflare Tunnel). A plain http address loads the 2D page but the Quest browser will not enter VR.</Overview>
   <Category>MediaApp:Books</Category>
   <WebUI>http://[IP]:[PORT:80]/</WebUI>
-  <Icon>TODO-icon-url</Icon>
+  <Icon>https://raw.githubusercontent.com/dervish666/PanelsXR/main/deploy/unraid/panelsxr-icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <Config Name="WebUI Port" Target="80" Default="8677" Mode="tcp" Description="Port for the Panel web UI" Type="Port" Display="always" Required="true" Mask="false">8677</Config>
