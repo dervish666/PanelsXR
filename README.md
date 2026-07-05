@@ -6,10 +6,15 @@ the iPad; browse your whole library as a wall of floating covers; turn pages on
 the thumbstick. It runs in the Quest browser — no store, no native build, no
 sideload — and self-hosts as a single Docker container next to Komga.
 
-> **Status:** v0.1.0 — first shipped release. Single-user / family focused, young
-> but real. See [CHANGELOG.md](CHANGELOG.md).
+![The A–Z alphabet shelf — each letter is a stack of your comics; pick one to be surrounded by that letter's series](docs/library-az.png)
+
+> **Status:** v0.2.0 — self-hostable and on Docker Hub. Single-user / family
+> focused, young but real. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Features
+
+![Recent mode surrounds you with your continue-reading and on-deck covers](docs/library-recent.png)
+
 
 - **Auto-resume** — reopens your last book fresh from Komga on load, so progress
   read anywhere (e.g. the iPad) carries over with zero clicks. Read-progress syncs
