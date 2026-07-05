@@ -43,9 +43,9 @@ export function App() {
     setCurveState(c)
   }, [])
 
-  // optional wave-a-hand-to-turn-the-page gesture (Quest hand tracking). Default
-  // OFF — the page tap zones + controller are the primary paging; a swipe is
-  // twitchy, so it's opt-in from the HUD before you enter VR.
+  // Hand mode (Quest hand tracking): shows the page tap zones + enables the wave
+  // gesture. OFF = controller mode (trigger-hold grabs the page, A/B pages, no
+  // zones). Default OFF so controllers work out of the box; opt in for hands.
   const [handGestures, setHandGestures] = useState(
     () => localStorage.getItem(HANDS_KEY) === '1',
   )
@@ -297,9 +297,9 @@ export function App() {
             <button
               className={`btn-ghost sm${handGestures ? ' on' : ''}`}
               onClick={toggleHands}
-              title="Optional: also turn pages by waving a hand across the page (Quest hand tracking). Tapping the page and the controller work regardless."
+              title="Hand mode (Quest hand tracking): turn pages by tapping the page's left/right thirds or waving a hand; middle taps show/hide the controls. Off = controller mode (trigger-hold to grab the page, A/B to page)."
             >
-              Wave {handGestures ? 'on' : 'off'}
+              Hands {handGestures ? 'on' : 'off'}
             </button>
             <button className="btn sm" onClick={() => setShowLibrary((v) => !v)}>
               Library

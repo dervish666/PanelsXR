@@ -144,6 +144,7 @@ export interface PageSurfaceProps {
   indices: number[] // 1 page (single) or 2 (spread), ascending
   curve?: number // 0 = flat, 1 = full bend toward the viewer at the edges
   onAmbience?: (a: PageAmbience) => void
+  onLayout?: (width: number, height: number) => void // actual page bounds, for the tap zones
 }
 
 // NOTE: a WebXR quad layer (<XRLayer quality="text-optimized">) was tried here
@@ -151,7 +152,7 @@ export interface PageSurfaceProps {
 // IWER emulator only because IWER lacks layer support and silently used the
 // mesh fallback). Needs a dedicated on-device debugging session — see the
 // project note. The plain mesh below is the proven-readable path.
-export function PageSurface({ urls, indices, curve = 0, onAmbience }: PageSurfaceProps) {
+export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: PageSurfaceProps) {
   const { gl } = useThree()
   const maxAnisotropy = useMemo(() => gl.capabilities.getMaxAnisotropy(), [gl])
   const cache = useRef<Map<number, THREE.Texture>>(new Map())
@@ -262,6 +263,12 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience }: PageSurfac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widthKey, curve])
   useEffect(() => () => geomRef.current.forEach((g) => g.dispose()), [])
+
+  // Report the real page bounds so the tap zones cover the actual page (its
+  // width varies per comic + doubles in spread mode). Height is fixed.
+  useEffect(() => {
+    onLayout?.(totalWidth, PAGE_HEIGHT)
+  }, [totalWidth, onLayout])
 
   // Physical presence: a paper stack + backing board behind the page. In VR
   // this is real geometry, so stereo + head tracking give genuine depth — the

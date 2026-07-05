@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import { Handle } from '@react-three/handle'
@@ -226,13 +226,15 @@ function TapZone({
 
 function TapZones({
   pageRef,
-  spread,
+  width,
+  height,
   onPrev,
   onNext,
   onToggleControls,
 }: {
   pageRef: React.RefObject<Group | null>
-  spread: boolean
+  width: number
+  height: number
   onPrev: () => void
   onNext: () => void
   onToggleControls: () => void
@@ -248,8 +250,8 @@ function TapZones({
     m.current.multiplyMatrices(page.matrixWorld, ZONE_OFFSET)
     m.current.decompose(g.position, g.quaternion, g.scale)
   })
-  const w = spread ? 1.95 : 0.95
-  const h = 1.5
+  const w = width
+  const h = height
   const zw = w / 3
   return (
     <group ref={groupRef}>
@@ -280,10 +282,19 @@ export function Reader({
   const [ambience, setAmbience] = useState<PageAmbience | null>(null)
   // the middle tap zone shows/hides the control bar (the "options" zone)
   const [controlsVisible, setControlsVisible] = useState(true)
+  // real page bounds (varies per comic + spread), so the tap zones fit the page
+  const [pageSize, setPageSize] = useState<[number, number]>([0.95, 1.5])
+  const onLayout = useCallback((w: number, h: number) => setPageSize([w, h]), [])
 
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
-      <PageSurface urls={pages} indices={indices} curve={curve} onAmbience={setAmbience} />
+      <PageSurface
+        urls={pages}
+        indices={indices}
+        curve={curve}
+        onAmbience={setAmbience}
+        onLayout={onLayout}
+      />
     </group>
   )
 
@@ -303,10 +314,14 @@ export function Reader({
         page
       )}
 
-      {inXR && (
+      {/* Tap zones are a HAND-mode feature: with hands off, they're gone and the
+          page grabs on a trigger-hold exactly as before (the zones' tap-capture
+          would otherwise block the grab). */}
+      {inXR && handGestures && (
         <TapZones
           pageRef={pageRef}
-          spread={spread}
+          width={pageSize[0]}
+          height={pageSize[1]}
           onPrev={onPrev}
           onNext={onNext}
           onToggleControls={() => setControlsVisible((v) => !v)}
