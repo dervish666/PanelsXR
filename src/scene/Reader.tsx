@@ -160,6 +160,106 @@ function VRMovement({
   return <XROrigin ref={originRef} />
 }
 
+// Three tap zones over the page — the comic-reader standard: left third pages
+// back, right third pages forward, middle opens/closes the controls. A sibling
+// of the page (follows its world matrix, sits just in front) so it's outside
+// the grab <Handle>; a controller trigger OR a hand pinch both "click" a zone.
+// The zone you point at tints red and shows a hint. stopPropagation keeps a tap
+// from also grabbing the page — grab/resize still works off the page's border.
+const ZONE_OFFSET = new Matrix4().makeTranslation(0, 0, 0.05)
+type ZoneId = 'prev' | 'mid' | 'next'
+
+function TapZone({
+  id,
+  x,
+  width,
+  height,
+  hover,
+  setHover,
+  onTap,
+  hint,
+}: {
+  id: ZoneId
+  x: number
+  width: number
+  height: number
+  hover: ZoneId | null
+  setHover: (fn: (h: ZoneId | null) => ZoneId | null) => void
+  onTap: () => void
+  hint: string
+}) {
+  const on = hover === id
+  return (
+    <group position={[x, 0, 0]}>
+      <mesh
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          setHover(() => id)
+        }}
+        onPointerOut={() => setHover((h) => (h === id ? null : h))}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          onTap()
+        }}
+      >
+        <planeGeometry args={[width, height]} />
+        <meshBasicMaterial color="#e2483a" transparent opacity={on ? 0.14 : 0} depthWrite={false} />
+      </mesh>
+      {on && (
+        <Text
+          raycast={() => null}
+          position={[0, 0, 0.006]}
+          fontSize={0.16}
+          color="#f2eeea"
+          outlineWidth={0.005}
+          outlineColor="#141010"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {hint}
+        </Text>
+      )}
+    </group>
+  )
+}
+
+function TapZones({
+  pageRef,
+  spread,
+  onPrev,
+  onNext,
+  onToggleControls,
+}: {
+  pageRef: React.RefObject<Group | null>
+  spread: boolean
+  onPrev: () => void
+  onNext: () => void
+  onToggleControls: () => void
+}) {
+  const groupRef = useRef<Group>(null)
+  const m = useRef(new Matrix4())
+  const [hover, setHover] = useState<ZoneId | null>(null)
+  useFrame(() => {
+    const page = pageRef.current
+    const g = groupRef.current
+    if (!page || !g) return
+    page.updateWorldMatrix(true, false)
+    m.current.multiplyMatrices(page.matrixWorld, ZONE_OFFSET)
+    m.current.decompose(g.position, g.quaternion, g.scale)
+  })
+  const w = spread ? 1.95 : 0.95
+  const h = 1.5
+  const zw = w / 3
+  return (
+    <group ref={groupRef}>
+      <TapZone id="prev" x={-zw} width={zw} height={h} hover={hover} setHover={setHover} onTap={onPrev} hint="‹" />
+      <TapZone id="mid" x={0} width={zw} height={h} hover={hover} setHover={setHover} onTap={onToggleControls} hint="•••" />
+      <TapZone id="next" x={zw} width={zw} height={h} hover={hover} setHover={setHover} onTap={onNext} hint="›" />
+    </group>
+  )
+}
+
 // The reading scene. In VR the page is a grab handle (move / rotate / two-handed
 // scale) and the left stick moves you around; on desktop we fall back to orbit.
 export function Reader({
@@ -178,6 +278,8 @@ export function Reader({
   const pageRef = useRef<Group>(null)
   const originRef = useRef<Group>(null)
   const [ambience, setAmbience] = useState<PageAmbience | null>(null)
+  // the middle tap zone shows/hides the control bar (the "options" zone)
+  const [controlsVisible, setControlsVisible] = useState(true)
 
   const page = (
     <group ref={pageRef} position={INITIAL_PAGE_POS}>
@@ -202,6 +304,16 @@ export function Reader({
       )}
 
       {inXR && (
+        <TapZones
+          pageRef={pageRef}
+          spread={spread}
+          onPrev={onPrev}
+          onNext={onNext}
+          onToggleControls={() => setControlsVisible((v) => !v)}
+        />
+      )}
+
+      {inXR && controlsVisible && (
         <ControlBar pageRef={pageRef}>
           <Tray width={1.74} height={0.44} />
           {/* row 1 — paging + modes */}

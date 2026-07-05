@@ -8,25 +8,30 @@ export interface XRHandPageInputProps {
   enabled?: boolean
 }
 
-// Turn pages by waving a hand across the page (Quest hand tracking). We read the
-// wrist joint's world position each frame, smooth its horizontal velocity, and
-// fire a page turn when a swipe is fast enough and clearly horizontal — a
-// right-to-left sweep advances (the physical "flip the page over" direction),
-// left-to-right goes back. Wrist (not fingertip) so finger wiggles don't count.
+// The optional "wave" gesture: wave a hand horizontally across the page to turn
+// it — right-to-left advances, left-to-right goes back. Discrete tapping (the
+// three page zones) and the controller are the primary paths; this is off by
+// default because a swipe is inherently twitchy.
 //
-// NOTE: hand tracking cannot be exercised in the desktop emulator — the gesture
-// thresholds below are first-pass and meant to be tuned on the real Quest.
-const SWIPE_VEL = 0.9 // m/s — smoothed horizontal hand speed that counts as a swipe
-const H_DOMINANCE = 1.4 // the motion must be this much more horizontal than vertical
-const COOLDOWN = 0.6 // s — one wave = one page; also swallows the return stroke
-const SMOOTH = 0.5 // velocity smoothing (0..1, higher = snappier/noisier)
+// It reads the wrist's world position each frame, smooths the horizontal
+// velocity, and needs a fast, clearly-horizontal motion to fire. Crucially it
+// then won't fire again until the hand SLOWS below RESET_VEL (velocity re-arm),
+// so the return stroke can never retrigger it — the bug in the first cut, which
+// used a time cooldown that a slow return stroke simply outlived.
+//
+// NOTE: hand tracking can't be exercised in the desktop emulator — the
+// thresholds are meant to be tuned on the real Quest.
+const SWIPE_VEL = 1.7 // m/s — smoothed horizontal speed to count as a swipe
+const RESET_VEL = 0.4 // m/s — hand must slow below this to re-arm
+const H_DOMINANCE = 1.5 // motion must be this much more horizontal than vertical
+const SMOOTH = 0.5
 
 interface HandTrack {
   lastX: number
   lastY: number
   vx: number
   vy: number
-  cooldownUntil: number
+  armed: boolean
   tracking: boolean
 }
 
@@ -35,7 +40,7 @@ const freshTrack = (): HandTrack => ({
   lastY: 0,
   vx: 0,
   vy: 0,
-  cooldownUntil: 0,
+  armed: true,
   tracking: false,
 })
 
@@ -48,7 +53,6 @@ export function XRHandPageInput({ onNext, onPrev, enabled = true }: XRHandPageIn
     if (!enabled || !frame) return
     const refSpace = state.gl.xr.getReferenceSpace()
     if (!refSpace || !frame.getJointPose) return
-    const now = state.clock.elapsedTime
 
     const hands: Array<[HandTrack, typeof left]> = [
       [tracks.current.left, left],
@@ -77,11 +81,14 @@ export function XRHandPageInput({ onNext, onPrev, enabled = true }: XRHandPageIn
       t.lastX = x
       t.lastY = y
 
-      if (now < t.cooldownUntil) continue
-      if (Math.abs(t.vx) > SWIPE_VEL && Math.abs(t.vx) > H_DOMINANCE * Math.abs(t.vy)) {
-        if (t.vx < 0) onNext()
-        else onPrev()
-        t.cooldownUntil = now + COOLDOWN
+      if (t.armed) {
+        if (Math.abs(t.vx) > SWIPE_VEL && Math.abs(t.vx) > H_DOMINANCE * Math.abs(t.vy)) {
+          if (t.vx < 0) onNext()
+          else onPrev()
+          t.armed = false
+        }
+      } else if (Math.abs(t.vx) < RESET_VEL) {
+        t.armed = true
       }
     }
   })
