@@ -10,6 +10,51 @@ _Parked / on the roadmap: per-user Komga login (cookie-passthrough), built-in
 HTTPS (`PANEL_DOMAIN` real-cert / `PANEL_TLS=internal`), forward-auth mode for
 Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 
+_On-device follow-ups (emulator can't verify): off-thread page decode, keeping
+the page surface mounted across the VR toggle, and abortable cover loads._
+
+## [0.2.1] — 2026-07-10
+
+The audit-remediation release — correctness, first-run experience, and container
+hardening. No new reading features; everything the reader did, it still does,
+now with the failure paths handled.
+
+### Fixed
+- **Reopening a finished book no longer wipes its progress.** Auto-resuming (or
+  reopening) a completed book used to silently reset its Komga read-progress to
+  page 1; the sync now only fires on a real page turn, so cross-device resume
+  stays intact.
+- **First-run and failure states are no longer silent.** The fail-closed `503`
+  gate, an unreachable Komga, and an empty library now show clear, distinct
+  messages (in both the 2D and 3D libraries) instead of a blank screen or an
+  indistinguishable "Nothing here yet". `ENTER VR` explains itself on browsers
+  without WebXR or without HTTPS instead of doing nothing.
+- No more dead-ends: closing the 3D library with nothing loaded, or the space
+  bar being swallowed while typing in the library search.
+- A transient Komga blip at startup no longer permanently forgets your last
+  book; the last page turn before the headset comes off is now flushed.
+- Failed page images show a label and auto-retry instead of a silent dark page;
+  `.cbz` archives ignore macOS resource-fork junk and are guarded against
+  zip-bomb sized inputs; `.cbz` picker is keyboard-accessible.
+
+### Security
+- **The `/komga` proxy is now least-privilege.** It forwards only the read
+  surface the app uses (GET series/books/pages/thumbnails, `POST /books/list`,
+  `PATCH read-progress`); everything else — `DELETE`, `PUT`, library management,
+  `/users` — is refused at the proxy, so even a full-access key can't be turned
+  into account control. `PANEL_USER` is validated (no Caddyfile injection).
+- Baseline security headers + CSP on the served app; private files kept out of
+  the Docker build context.
+
+### Performance
+- Page textures are clamped (bounds Quest VRAM); cover thumbnails get mipmaps;
+  a cover-texture disposal leak on library navigation is fixed.
+
+### Added
+- A GitHub Actions release workflow (build + tests + multi-arch push on a tag).
+- Type-safe error handling, a render error boundary, and unit tests for the
+  page-pairing logic.
+
 ## [0.2.0] — 2026-07-05
 
 The reading-experience release — page comfort, in-VR controls, and hands-free
@@ -80,6 +125,7 @@ self-hosted [Komga](https://komga.org) library into a Meta Quest 3 headset.
   `PANEL_AUTH=none` (LAN-only / upstream-gated). No accidental open proxy.
 - Unraid Community Applications template + self-hosting docs.
 
-[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/dervish666/PanelsXR/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.1.0
