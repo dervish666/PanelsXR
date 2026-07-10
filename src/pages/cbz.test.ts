@@ -29,6 +29,18 @@ describe('orderCbzImageNames', () => {
   it('returns empty when there are no images', () => {
     expect(orderCbzImageNames(['readme.txt', 'ComicInfo.xml'])).toEqual([])
   })
+
+  it('drops macOS AppleDouble junk so page count isn’t doubled', () => {
+    expect(
+      orderCbzImageNames([
+        '__MACOSX/._page01.png',
+        'page01.png',
+        '__MACOSX/sub/._page02.png',
+        'page02.png',
+        'sub/._page03.png',
+      ]),
+    ).toEqual(['page01.png', 'page02.png'])
+  })
 })
 
 describe('IMAGE_RE', () => {

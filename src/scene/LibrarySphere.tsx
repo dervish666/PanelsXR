@@ -119,8 +119,11 @@ async function loadThumb(url: string): Promise<THREE.Texture> {
         c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
         const tex = new THREE.CanvasTexture(c)
         tex.colorSpace = THREE.SRGBColorSpace
-        tex.generateMipmaps = false
-        tex.minFilter = THREE.LinearFilter
+        // Mipmaps reduce the minification shimmer on covers far back in the dome
+        // (WebGL2 on the Quest handles NPOT mipmaps fine).
+        tex.generateMipmaps = true
+        tex.minFilter = THREE.LinearMipmapLinearFilter
+        tex.magFilter = THREE.LinearFilter
         resolve(tex)
       }
       img.onerror = () => reject(new Error(`thumb failed: ${url}`))
@@ -148,6 +151,7 @@ function Cover({
 }) {
   const group = useRef<THREE.Group>(null)
   const [tex, setTex] = useState<THREE.Texture | null>(null)
+  const texRef = useRef<THREE.Texture | null>(null)
   const [hover, setHover] = useState(false)
   const born = useRef<number | null>(null)
 
@@ -161,15 +165,19 @@ function Cover({
     loadThumb(item.thumb)
       .then((t) => {
         if (dead) t.dispose()
-        else setTex(t)
+        else {
+          texRef.current = t
+          setTex(t)
+        }
       })
       .catch(() => {})
+    // Dispose the texture directly via a ref — a setState updater in unmount
+    // cleanup isn't reliably run on an unmounted fiber, which leaked one texture
+    // per cover on every nav.
     return () => {
       dead = true
-      setTex((t) => {
-        t?.dispose()
-        return null
-      })
+      texRef.current?.dispose()
+      texRef.current = null
     }
   }, [item.thumb])
 
@@ -243,6 +251,7 @@ function LetterStack({
 }) {
   const group = useRef<THREE.Group>(null)
   const [tex, setTex] = useState<THREE.Texture | null>(null)
+  const texRef = useRef<THREE.Texture | null>(null)
   const [hover, setHover] = useState(false)
   const born = useRef<number | null>(null)
 
@@ -257,15 +266,17 @@ function LetterStack({
     loadThumb(seriesThumbUrl(first.id))
       .then((t) => {
         if (dead) t.dispose()
-        else setTex(t)
+        else {
+          texRef.current = t
+          setTex(t)
+        }
       })
       .catch(() => {})
+    // Dispose via ref, not a setState updater in cleanup (unreliable on unmount).
     return () => {
       dead = true
-      setTex((t) => {
-        t?.dispose()
-        return null
-      })
+      texRef.current?.dispose()
+      texRef.current = null
     }
   }, [bucket])
 
@@ -348,6 +359,10 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
   const [buckets, setBuckets] = useState<LetterBucket[] | null>(null)
   const [books, setBooks] = useState<KomgaBook[] | null>(null)
   const [busy, setBusy] = useState(false)
+  // Distinguish "still loading" from "loaded, empty" from "couldn't reach Komga"
+  // (incl. the fail-closed 503) — otherwise every failure looks like an empty
+  // library. null = still loading the initial shelf.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [nav, setNav] = useState<Nav>({ kind: 'recent' })
   const [page, setPage] = useState(0)
 
@@ -421,6 +436,13 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
     let dead = false
     Promise.allSettled([listInProgress(), listOnDeck(), listSeries()]).then(([inProg, onDeck, series]) => {
       if (dead) return
+      // listSeries is the load-bearing call: if it failed, the whole shelf is
+      // unavailable — surface WHY (503 gate / Komga down) instead of "empty".
+      if (series.status === 'rejected') {
+        setLoadError(
+          series.reason instanceof Error ? series.reason.message : 'Couldn’t reach Komga.',
+        )
+      }
       const seriesList = series.status === 'fulfilled' ? series.value : []
       setBuckets(bucketSeriesByFirstLetter(seriesList))
 
@@ -554,7 +576,8 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
     return `A–Z · ${nav.letter} · ${nav.seriesName}`
   }, [nav])
 
-  if (!recent && !buckets) return null
+  // Still fetching the initial shelf (vs loaded-empty vs failed).
+  const initialLoading = recent === null && buckets === null && !loadError
 
   return (
     <group>
@@ -571,17 +594,27 @@ export function LibrarySphere({ onOpenBook, onClose }: LibrarySphereProps) {
             ))}
       </group>
 
-      {/* loading / empty text for the current surround */}
-      {busy && (
+      {/* state text for the current surround: error > initial-load > drilling >
+          empty. The error case (incl. the fail-closed 503) shows WHY, so a
+          brand-new self-hoster isn't staring at a wordless void. */}
+      {loadError ? (
+        <group position={[0, HEAD, -2]}>
+          <Text raycast={() => null} fontSize={0.09} color="#e2483a" anchorX="center" anchorY="bottom" outlineWidth={0.004} outlineColor="#141010">
+            Can’t load your library
+          </Text>
+          <Text raycast={() => null} position={[0, -0.12, 0]} fontSize={0.055} maxWidth={2.6} textAlign="center" color="#c9beb8" anchorX="center" anchorY="top" outlineWidth={0.003} outlineColor="#141010">
+            {loadError}
+          </Text>
+        </group>
+      ) : initialLoading || busy ? (
         <Text raycast={() => null} position={[0, HEAD, -2]} fontSize={0.1} color="#c9beb8" anchorX="center" outlineWidth={0.004} outlineColor="#141010">
           Loading…
         </Text>
-      )}
-      {!busy && nav.kind !== 'letters' && surroundAll.length === 0 && (
+      ) : nav.kind !== 'letters' && surroundAll.length === 0 ? (
         <Text raycast={() => null} position={[0, HEAD, -2]} fontSize={0.08} color="#c9beb8" anchorX="center" outlineWidth={0.004} outlineColor="#141010">
-          Nothing here yet
+          Your library is empty
         </Text>
-      )}
+      ) : null}
 
       {/* world-fixed control bar (sibling of the spinning group → the grab
           pointer can't eat it). Two compact rows: pagination flanks the

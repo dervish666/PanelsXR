@@ -3,8 +3,6 @@
 
 export interface KomgaPage<T> {
   content: T[]
-  totalElements: number
-  last: boolean
 }
 
 export interface KomgaSeries {
@@ -24,7 +22,6 @@ export interface KomgaBook {
   seriesId: string
   seriesTitle: string
   name: string
-  number: number
   media: {
     status: string // READY | ERROR | ...
     pagesCount: number
