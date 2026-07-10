@@ -9,6 +9,10 @@ dist-ssr
 
 # Local tool caches
 .impeccable/
+.recall/
+
+# stray screenshots dropped at the repo root
+/Screenshot*.png
 
 # local Claude Code project guidance — not for the public repo
 CLAUDE.md

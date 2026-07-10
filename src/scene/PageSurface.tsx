@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
+import { Text } from '@react-three/drei'
 import * as THREE from 'three'
 
 // Keep the visible pages plus this many neighbours resident; dispose the rest.
@@ -54,14 +55,33 @@ function curvedSlice(
   return g
 }
 
-function makeTexture(img: HTMLImageElement): THREE.Texture {
-  const tex = new THREE.Texture(img)
+// Clamp very large scans: covers already downscale to ≤256px, but full pages
+// were uncapped, so a library of 4000px scans could hold several at full res in
+// the resident window and exhaust Quest VRAM. 2048 on the long edge stays sharp
+// for reading while bounding memory. Downscaled pages become a CanvasTexture;
+// smaller pages keep the plain image path unchanged.
+const MAX_PAGE_EDGE = 2048
+
+function tuneTexture(tex: THREE.Texture): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.generateMipmaps = true
   tex.minFilter = THREE.LinearMipmapLinearFilter
   tex.magFilter = THREE.LinearFilter
   tex.needsUpdate = true
   return tex
+}
+
+function makeTexture(img: HTMLImageElement): THREE.Texture {
+  const longEdge = Math.max(img.width, img.height)
+  if (longEdge > MAX_PAGE_EDGE) {
+    const scale = MAX_PAGE_EDGE / longEdge
+    const c = document.createElement('canvas')
+    c.width = Math.max(1, Math.round(img.width * scale))
+    c.height = Math.max(1, Math.round(img.height * scale))
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+    return tuneTexture(new THREE.CanvasTexture(c))
+  }
+  return tuneTexture(new THREE.Texture(img))
 }
 
 function loadTexture(url: string): Promise<THREE.Texture> {
@@ -159,6 +179,14 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
   const cacheUrls = useRef<string[] | null>(null)
   // Textures live in the cache ref; bump forces a re-render when one arrives.
   const [, bump] = useReducer((c: number) => c + 1, 0)
+  // Page indices whose image failed to load, and how many times we've tried —
+  // so a 404/network drop shows a visible label instead of a silent dark plane,
+  // and auto-retries a bounded number of times (no pointer handler: this mesh is
+  // inside the grab Handle, where the grab pointer eats clicks on real hardware).
+  const failed = useRef<Set<number>>(new Set())
+  const attempts = useRef<Map<number, number>>(new Map())
+  const [retryNonce, retry] = useReducer((c: number) => c + 1, 0)
+  const MAX_ATTEMPTS = 4
 
   useEffect(() => {
     let cancelled = false
@@ -198,16 +226,34 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
           }
           tex.anisotropy = maxAnisotropy
           cache.current.set(i, tex)
+          failed.current.delete(i)
+          attempts.current.delete(i)
           bump()
         })
-        .catch((err) => console.error('[Panel]', err))
+        .catch((err) => {
+          if (cancelled) return
+          console.error('[Panel]', err)
+          const n = (attempts.current.get(i) ?? 0) + 1
+          attempts.current.set(i, n)
+          failed.current.add(i)
+          bump()
+          if (n < MAX_ATTEMPTS) {
+            // back off 1s, 2s, 3s… then re-run the effect to try again
+            setTimeout(() => {
+              if (!cancelled) {
+                failed.current.delete(i)
+                retry()
+              }
+            }, n * 1000)
+          }
+        })
     }
 
     bump()
     return () => {
       cancelled = true
     }
-  }, [indices, urls, maxAnisotropy])
+  }, [indices, urls, maxAnisotropy, retryNonce])
 
   // Emit the room ambience for the first visible page once it's resident.
   const ambienceFor = useRef<string | null>(null)
@@ -307,6 +353,24 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
           />
         </mesh>
       ))}
+      {/* A failed page would otherwise be an unexplained dark plane in-headset
+          (the console is invisible there). Say so, and note it's auto-retrying. */}
+      {pages.some((p) => !p.tex && failed.current.has(p.i)) && (
+        <Text
+          raycast={() => null}
+          position={[0, 0, 0.02]}
+          fontSize={0.09}
+          maxWidth={totalWidth * 0.8}
+          textAlign="center"
+          anchorX="center"
+          anchorY="middle"
+          color="#e2483a"
+          outlineWidth={0.005}
+          outlineColor="#141010"
+        >
+          Page didn’t load — retrying…
+        </Text>
+      )}
     </group>
   )
 }

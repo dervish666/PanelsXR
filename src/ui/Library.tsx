@@ -122,6 +122,11 @@ export function Library({ onOpenBook, onClose }: LibraryProps) {
                 No series match “{query}”
               </li>
             )}
+            {!q && series?.length === 0 && !error && (
+              <li className="muted" style={{ padding: '10px' }}>
+                Your Komga library is empty — add some comics in Komga and they’ll show up here.
+              </li>
+            )}
             {shownSeries?.map((s) => (
               <li key={s.id}>
                 <button className="row" onClick={() => setSelected(s)}>

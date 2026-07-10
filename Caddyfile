@@ -24,6 +24,17 @@
 	# site-wide HTTP basic auth (populated when PANEL_PASSWORD is set)
 	import /etc/caddy/auth.conf
 
+	# Baseline security headers. The app is fully self-contained/same-origin, so
+	# the CSP allows only 'self' plus blob:/data: (needed for .cbz object URLs and
+	# canvas/texture sources). No external hosts, no inline scripts.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self'"
+		-Server
+	}
+
 	# same-origin Komga proxy. The fail-closed gate runs first inside the route,
 	# so an unconfigured Panel returns 503 here instead of leaking the library.
 	# Also strips Authorization so Panel's basic-auth creds never reach Komga
@@ -31,6 +42,32 @@
 	handle_path /komga/* {
 		route {
 			import /etc/caddy/gate.conf
+
+			# Least-privilege proxy. The injected key bypasses Komga's own auth,
+			# so restrict it to exactly what the client needs: READ (GET) on
+			# series/books/pages/thumbnails, POST /books/list to search, and PATCH
+			# read-progress. Everything else (DELETE, PUT, library management,
+			# /users) is refused here — so even a full-access key can't be turned
+			# into account control through Panel. `respond` is terminal, so the
+			# first matching deny wins and the reverse_proxy is the fall-through.
+			@notReadMethod not method GET POST PATCH
+			respond @notReadMethod "Panel proxy: method not allowed" 405
+
+			@writePost {
+				method POST
+				not path /api/v1/books/list
+			}
+			respond @writePost "Panel proxy: not allowed" 403
+
+			@writePatch {
+				method PATCH
+				not path_regexp ^/api/v1/books/[^/]+/read-progress$
+			}
+			respond @writePatch "Panel proxy: not allowed" 403
+
+			@sensitive path /api/v1/users* /api/v1/oauth2* /api/v1/claim*
+			respond @sensitive "Panel proxy: not allowed" 403
+
 			reverse_proxy {$KOMGA_URL} {
 				header_up X-API-Key {$KOMGA_API_KEY}
 				header_up Host {upstream_hostport}

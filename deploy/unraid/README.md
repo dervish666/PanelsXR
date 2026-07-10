@@ -53,31 +53,46 @@ read-only key caps the worst case to "someone saw my comics."
 # build the image
 docker build -t dervish/panelsxr:latest .
 
-# run it against your Komga (KOMGA_URL / KOMGA_API_KEY live in .env.local)
-docker run --rm -p 8677:80 --env-file .env.local dervish/panelsxr:latest
+# run it against your Komga. Panel is fail-closed, so you MUST set a gate or the
+# /komga proxy returns 503: either a password (recommended) …
+docker run --rm -p 8677:80 \
+  -e KOMGA_URL="http://192.168.1.10:8080" \
+  -e KOMGA_API_KEY="your-read-only-key" \
+  -e PANEL_PASSWORD="a-test-password" \
+  dervish/panelsxr:latest
 
-# open http://localhost:8677 — pick a book, and the /komga proxy should stream it
+# … or, for a quick LAN-only test, opt out of the gate explicitly:
+#   -e PANEL_AUTH=none   (serves your library to anyone who reaches the URL)
+
+# open http://localhost:8677 — log in (user "panel"), pick a book, and the
+# /komga proxy streams it. (Without PANEL_PASSWORD or PANEL_AUTH=none you'll get
+# a 503 by design — that's the fail-closed gate, not a bug.)
 ```
 
 ## Publishing to Community Apps
 
 You've done this before with `dervish/unraidmonitorbot`; same flow:
 
-1. **Push a multi-arch image to Docker Hub** (Unraid is amd64; arm64 is a bonus):
+1. **Push a multi-arch image to Docker Hub** (Unraid is amd64; arm64 is a bonus).
+   Pass `PANEL_VERSION` so the image's `org.opencontainers.image.version` label
+   matches the tag (otherwise it defaults to `dev`):
    ```bash
    docker buildx build --platform linux/amd64,linux/arm64 \
+     --build-arg PANEL_VERSION=vX.Y.Z \
      -t dervish/panelsxr:latest -t dervish/panelsxr:vX.Y.Z --push .
    ```
-2. **Push this repo to GitHub** (PanelsXR has no remote yet) — CA needs a public
-   project + support URL, and the template lives in the repo.
-3. **Submit the template** at **https://ca.unraid.net/submit** — the portal live-
-   scans your repo, parses `deploy/unraid/panelsxr.xml` + a `ca_profile.xml`,
-   checks for duplicates, and previews the listing. Fill in metadata/license/
-   support links and publish into the feed.
+   Or let CI do it: pushing a `vX.Y.Z` git tag triggers `.github/workflows/release.yml`
+   (needs the `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets set).
+2. **Submit the template** at **https://ca.unraid.net/submit** — the portal live-
+   scans the public repo (`github.com/dervish666/PanelsXR`), parses
+   `deploy/unraid/panelsxr.xml` + `ca_profile.xml`, checks for duplicates, and
+   previews the listing. Panel is already in Sam's registered CA repo
+   (`dervish666/unraid-templates`), so it flows into Community Apps on the next
+   index refresh.
 
 ## The template
 
-`panelsxr.xml` is a first-draft Unraid CA template. Before submitting, fill the
-`TODO` fields (GitHub project/support URLs, icon URL — all need the repo pushed
-to GitHub first) and confirm the host port. The two env vars — `KOMGA_URL` and
-`KOMGA_API_KEY` — are what the user configures in the Unraid "Add Container" UI.
+`panelsxr.xml` is the Unraid CA template. Its Project/Support/Icon URLs point at
+the public repo and it's ready to submit — just confirm the host port for your
+box. The user configures `KOMGA_URL`, `KOMGA_API_KEY`, and a gate (`PANEL_PASSWORD`
+or `PANEL_AUTH=none`) in the Unraid "Add Container" UI.

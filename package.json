@@ -4,6 +4,14 @@
   "version": "0.2.0",
   "type": "module",
   "description": "Panel — a WebXR comic reader that streams a Komga library into a VR headset.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dervish666/PanelsXR.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite --host",
     "dev:quest": "HTTPS=true vite --host",

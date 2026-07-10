@@ -5,9 +5,62 @@ import type { KomgaBook, KomgaPage, KomgaSeries } from './types'
 // image URLs work directly in <img>/textures — no fetch→blob dance needed.
 const BASE = '/komga/api/v1'
 
+// A Komga request that failed, carrying enough to show the user something
+// actionable (status + the human message) rather than a raw internal string.
+// status 0 = the request never reached Komga (network / CORS / tunnel down).
+export class KomgaError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'KomgaError'
+    this.status = status
+  }
+}
+
+// Turn a status (and the server's response body, when present) into a line a
+// human can act on. The container's fail-closed gate returns a helpful 503 body
+// ("Set PANEL_PASSWORD…"); surface it instead of throwing it away.
+export function humanKomgaError(status: number, body?: string): string {
+  const trimmed = body?.trim()
+  if (status === 0) return 'Couldn’t reach Komga — check the server is up and the connection.'
+  if (status === 401 || status === 403) return 'Komga rejected the request — check the API key.'
+  if (status === 503) {
+    // The gate's own message is the most useful thing we can show.
+    if (trimmed && trimmed.length < 400 && !trimmed.startsWith('<')) return trimmed
+    return 'Panel isn’t unlocked yet — set PANEL_PASSWORD (or PANEL_AUTH=none) on the container.'
+  }
+  if (status >= 500) return 'Komga is having a problem (server error) — try again shortly.'
+  return `Couldn’t load from Komga (error ${status}).`
+}
+
+const TIMEOUT_MS = 12_000 // a hung Komga (cold tunnel) shouldn't spin forever
+
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, signal: ctrl.signal })
+  } catch (err) {
+    // fetch rejects on network-level failure (Wi-Fi blip, tunnel cold, CORS) or
+    // on our timeout abort — both are "couldn't reach Komga" to the user.
+    const msg =
+      err instanceof DOMException && err.name === 'AbortError'
+        ? 'Komga didn’t respond in time — check the server and try again.'
+        : humanKomgaError(0)
+    throw new KomgaError(0, msg)
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new KomgaError(res.status, humanKomgaError(res.status, body))
+  }
+  return res
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`Komga ${res.status} on ${path}`)
+  const res = await request(path, { headers: { Accept: 'application/json' } })
   return res.json() as Promise<T>
 }
 
@@ -64,14 +117,13 @@ export function getBook(bookId: string): Promise<KomgaBook> {
 // reading" shelf. Uses the newer POST /books/list search (more reliable than
 // GET /books, which is fiddly about filters).
 export async function listInProgress(): Promise<KomgaBook[]> {
-  const res = await fetch(`${BASE}/books/list?size=12&sort=readProgress.readDate,desc`, {
+  const res = await request('/books/list?size=12&sort=readProgress.readDate,desc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       condition: { readStatus: { operator: 'is', value: 'IN_PROGRESS' } },
     }),
   })
-  if (!res.ok) throw new Error(`Komga ${res.status} on /books/list`)
   const page = (await res.json()) as KomgaPage<KomgaBook>
   return page.content.filter((b) => b.media.status === 'READY')
 }
@@ -116,12 +168,21 @@ export async function saveProgress(
   bookId: string,
   page: number, // 1-indexed
   completed: boolean,
+  keepalive = false, // set when flushing on tab-hide so the request outlives the page
 ): Promise<void> {
-  const res = await fetch(`${BASE}/books/${bookId}/read-progress`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ page, completed }),
-  })
   // Progress sync is best-effort; log failures rather than breaking reading.
-  if (!res.ok) console.error(`[Panel] progress save failed: ${res.status} on ${bookId}`)
+  // Covers BOTH an HTTP error and a network-level fetch rejection (Wi-Fi blip on
+  // the headset is the common case) — the latter used to escape as an unhandled
+  // rejection through the fire-and-forget call site.
+  try {
+    const res = await fetch(`${BASE}/books/${bookId}/read-progress`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page, completed }),
+      keepalive,
+    })
+    if (!res.ok) console.error(`[Panel] progress save failed: ${res.status} on ${bookId}`)
+  } catch (err) {
+    console.error(`[Panel] progress save failed (network) on ${bookId}`, err)
+  }
 }

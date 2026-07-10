@@ -75,7 +75,7 @@ connection in `.env.local` (copy `.env.example`); the dev server proxies
 ## Tech
 
 Vite + React 19 + TypeScript · three.js · @react-three/fiber · @react-three/xr v6
-(`createXRStore`, `XRLayer`, controller state) · @react-three/handle · drei ·
+(`createXRStore`, controller/hand input state) · @react-three/handle · drei ·
 JSZip (dev-only `.cbz`). Container: multi-stage build → Caddy. Node 22.
 
 ## License

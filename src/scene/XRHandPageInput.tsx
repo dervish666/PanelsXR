@@ -50,7 +50,17 @@ export function XRHandPageInput({ onNext, onPrev, enabled = true }: XRHandPageIn
   const tracks = useRef({ left: freshTrack(), right: freshTrack() })
 
   useFrame((state, dt, frame: XRFrame | undefined) => {
-    if (!enabled || !frame) return
+    if (!enabled || !frame) {
+      // Drop tracking across any gap (hands toggled off, session ended, no
+      // frame) so the next tracked frame re-initialises lastX/lastY instead of
+      // differentiating across the gap — a stale ~0.6m jump over one frame reads
+      // as a >20 m/s swipe and turns the page by itself on re-entry.
+      tracks.current.left.tracking = false
+      tracks.current.left.armed = true
+      tracks.current.right.tracking = false
+      tracks.current.right.armed = true
+      return
+    }
     const refSpace = state.gl.xr.getReferenceSpace()
     if (!refSpace || !frame.getJointPose) return
 

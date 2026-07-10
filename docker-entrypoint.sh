@@ -21,6 +21,20 @@ if [ "$PANEL_AUTH" = "none" ]; then
   echo "[panel] !!! UNGATED (PANEL_AUTH=none) — your entire Komga library is served to ANYONE who reaches this URL. Ensure it is LAN-only or gated upstream (reverse proxy / SSO). !!!"
 elif [ -n "$PANEL_PASSWORD" ]; then
   PUSER="${PANEL_USER:-panel}"
+  # PUSER is written verbatim into the Caddyfile's basic_auth block; a value with
+  # whitespace, a newline, or Caddyfile syntax (}) could break out of the block
+  # and neuter the auth gate. Restrict it to a safe charset and fail closed.
+  case "$PUSER" in
+    *[!A-Za-z0-9._-]*|'')
+      echo "[panel] PANEL_USER must be non-empty and only contain letters, digits, . _ or - — refusing to start."
+      exit 1
+      ;;
+  esac
+  # NB: caddy hash-password needs --plaintext or a TTY — it does NOT read a piped
+  # password (that errors "EOF"), so the value is passed as an argv here. It's
+  # briefly visible in the container's process table during startup, which is an
+  # acceptable trade: the same value is already in the container env (docker
+  # inspect), and this is the only form caddy accepts non-interactively.
   PHASH="$(caddy hash-password --plaintext "$PANEL_PASSWORD" --algorithm bcrypt)"
   printf 'basic_auth {\n\t%s %s\n}\n' "$PUSER" "$PHASH" > "$AUTH_FILE"
   : > "$GATE_FILE"
