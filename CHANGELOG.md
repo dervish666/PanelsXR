@@ -13,6 +13,19 @@ Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 _On-device follow-ups (emulator can't verify): off-thread page decode, keeping
 the page surface mounted across the VR toggle, and abortable cover loads._
 
+## [0.2.3] — 2026-07-12
+
+### Fixed
+- **A new container deploy now "takes" on the first load.** The container set no
+  `Cache-Control`, so browsers fell back to heuristic caching and the Quest held
+  a stale `index.html` pointing at the previous build's hashed assets — a new
+  image needed a couple of hard refreshes before it appeared (seen upgrading to
+  0.2.2). `index.html` and other unfingerprinted files are now served `no-cache`
+  so they always revalidate via ETag (a cheap 304 when unchanged), while Vite's
+  content-hashed `/assets/*` are served `immutable` for a year. Result: no
+  stale-deploy lag, and faster repeat loads (the big JS/texture bundles stop
+  revalidating every visit).
+
 ## [0.2.2] — 2026-07-12
 
 Hotfix for a regression introduced in 0.2.1.
