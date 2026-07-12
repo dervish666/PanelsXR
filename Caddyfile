@@ -24,14 +24,25 @@
 	# site-wide HTTP basic auth (populated when PANEL_PASSWORD is set)
 	import /etc/caddy/auth.conf
 
-	# Baseline security headers. The app is fully self-contained/same-origin, so
-	# the CSP allows only 'self' plus blob:/data: (needed for .cbz object URLs and
-	# canvas/texture sources). No external hosts, no inline scripts.
+	# Baseline security headers (static + browser-agnostic).
+	#
+	# DELIBERATELY OMITTED — both broke the 3D library + VR reader (BLACK screen),
+	# regression-fixed in v0.2.2 after v0.2.1 shipped with them:
+	#   - X-Content-Type-Options: nosniff — drei's <Text> (troika) runs its text
+	#     layout in a blob-URL worker whose blob has no explicit JS MIME type;
+	#     nosniff makes Chrome refuse to execute it, so every 3D scene using text
+	#     (the whole library + reader) throws "Worker module ... init did not
+	#     return a callable function" and renders black. The 2D landing has no
+	#     <Text>, so it survives — which is what made this look partial.
+	#   - Content-Security-Policy — troika also rebuilds that module via the
+	#     Function constructor, which a `default-src 'self'` CSP blocks (and
+	#     'unsafe-eval' alone didn't reliably fix it).
+	# For a fully self-contained, same-origin app with no external scripts and no
+	# user-injected HTML, both are low value; the remaining static headers are
+	# safe (verified: troika renders with these present).
 	header {
-		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy no-referrer
-		Content-Security-Policy "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self'"
 		-Server
 	}
 
