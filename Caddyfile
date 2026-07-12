@@ -91,6 +91,19 @@
 	handle {
 		root * /srv
 		try_files {path} /index.html
+
+		# Cache policy. Vite fingerprints every build asset (index-[hash].js/css),
+		# so those names are immutable — cache them hard for fast repeat loads.
+		# But index.html must ALWAYS revalidate: it points at the current hashes,
+		# and if the browser serves a stale copy a new deploy won't "take" until
+		# its heuristic cache lapses (the v0.2.2 "needs a couple of refreshes on
+		# the Quest" symptom). `no-cache` = store but revalidate; the ETag makes
+		# that a cheap 304 when unchanged.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@notAssets not path /assets/*
+		header @notAssets Cache-Control "no-cache"
+
 		file_server
 	}
 
