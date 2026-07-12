@@ -13,6 +13,19 @@ Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 _On-device follow-ups (emulator can't verify): off-thread page decode, keeping
 the page surface mounted across the VR toggle, and abortable cover loads._
 
+## [0.2.2] — 2026-07-12
+
+Hotfix for a regression introduced in 0.2.1.
+
+### Fixed
+- **The 3D library and VR reader rendered black.** The security headers added in
+  0.2.1 broke drei's `<Text>` (troika): `X-Content-Type-Options: nosniff` makes
+  the Quest/Chrome browser refuse troika's blob-URL text-layout worker, so every
+  3D scene using text (the whole library and reader) threw and rendered black,
+  while the plain-HTML 2D landing still worked. Removed `nosniff` and the CSP
+  (troika also needs `Function`, which the CSP blocked). `X-Frame-Options` and
+  `Referrer-Policy` are kept — verified the 3D scene renders with those present.
+
 ## [0.2.1] — 2026-07-10
 
 The audit-remediation release — correctness, first-run experience, and container
@@ -125,7 +138,8 @@ self-hosted [Komga](https://komga.org) library into a Meta Quest 3 headset.
   `PANEL_AUTH=none` (LAN-only / upstream-gated). No accidental open proxy.
 - Unraid Community Applications template + self-hosting docs.
 
-[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dervish666/PanelsXR/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/dervish666/PanelsXR/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/dervish666/PanelsXR/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dervish666/PanelsXR/releases/tag/v0.1.0
