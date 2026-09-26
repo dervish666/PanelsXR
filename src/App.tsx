@@ -10,6 +10,8 @@ import { loadCbz } from './pages/cbz'
 import { visiblePages, nextIndex, prevIndex } from './pages/pairing'
 import { storageGet, storageSet, storageRemove } from './storage'
 import { Library } from './ui/Library'
+import { Setup } from './ui/Setup'
+import { BYO, getKomgaConfig } from './config'
 import { bookPageUrls, bookThumbUrl, getBook, saveProgress, KomgaError } from './komga/client'
 import type { KomgaBook } from './komga/types'
 
@@ -25,6 +27,10 @@ export function App() {
   const [pages, setPages] = useState<string[]>([])
   const [index, setIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // Hosted BYO build: false until the user has connected their Komga (cookie
+  // present). The container build (BYO=false) is always configured — the key is
+  // injected server-side — so this stays true and the setup screen never shows.
+  const [configured, setConfigured] = useState(() => !BYO || getKomgaConfig() !== null)
   const [showLibrary, setShowLibrary] = useState(false)
   const [view, setView] = useState<'read' | 'sphere'>('read')
   // chrome: the 2D shell. 'marquee' = the landing placard (the front door that
@@ -113,6 +119,8 @@ export function App() {
   // rebooting, cold tunnel) must NOT forget the book — only a definitive 404
   // (the book was deleted from Komga) clears the resume pointer.
   useEffect(() => {
+    // BYO build: nothing to resume until the user has connected a Komga server.
+    if (BYO && getKomgaConfig() === null) return
     const id = storageGet(LAST_BOOK_KEY)
     if (!id) return
     let stale = false
@@ -282,6 +290,12 @@ export function App() {
       : `${(visible[0] ?? 0) + 1}`
   const progress = pages.length > 0 ? (furthestVisible + 1) / pages.length : 0
 
+  // Gate the whole app behind the connect screen until a Komga is set up (BYO
+  // build only). Placed after every hook so hook order stays stable.
+  if (!configured) {
+    return <Setup onDone={() => setConfigured(true)} />
+  }
+
   return (
     <>
       {chrome === 'marquee' ? (
@@ -348,6 +362,15 @@ export function App() {
               Load .cbz
               <input ref={fileRef} type="file" accept=".cbz,.zip" onChange={onPickCbz} hidden />
             </label>
+            {BYO && (
+              <button
+                className="btn-ghost"
+                onClick={() => setConfigured(false)}
+                title="Connect a different Komga server or API key"
+              >
+                Komga server
+              </button>
+            )}
           </div>
 
           {error && <div className="error">{error}</div>}

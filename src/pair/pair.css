@@ -1,0 +1,149 @@
+/* Panel — phone pairing page. Deliberately tiny and self-contained (no shared app
+   CSS, no three.js, no web fonts) so it loads instantly on a phone. Same pulp
+   palette as the app, expressed as plain hex. */
+:root {
+  --bg: #141010;
+  --surface: #201a18;
+  --surface-2: #2a2220;
+  --ink: #f2eeea;
+  --muted: #b4a9a3;
+  --accent: #e2483a;
+  --accent-hi: #ef5a49;
+  --ink-black: #0d0a0a;
+  --border: #3a302d;
+  --ok: #86cf86;
+  --err: #f0938a;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+body {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.pair-card {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(#2a1d1b, #211917);
+  border: 3px solid var(--ink-black);
+  border-radius: 14px;
+  box-shadow: 6px 7px 0 rgba(0, 0, 0, 0.55);
+  padding: 24px 22px 20px;
+}
+.pair-brand {
+  font-weight: 900;
+  font-size: 34px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.pair-rule {
+  height: 9px;
+  margin: 4px 0 12px;
+  background-image: radial-gradient(circle, var(--accent) 1.6px, transparent 1.8px);
+  background-size: 7px 7px;
+}
+.pair-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.pair-lead {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+form label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+form input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 13px 14px;
+  min-height: 50px;
+  font-size: 16px; /* ≥16px stops iOS Safari zooming on focus */
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 2px solid var(--ink-black);
+  border-radius: 8px;
+  text-transform: none;
+}
+#f-code {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+form input::placeholder {
+  color: #7d726c;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 400;
+}
+form input:focus-visible {
+  outline: 3px solid var(--accent-hi);
+  outline-offset: 2px;
+}
+#f-submit {
+  width: 100%;
+  margin-top: 4px;
+  padding: 15px;
+  min-height: 52px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: var(--accent);
+  border: 3px solid var(--ink-black);
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 var(--ink-black);
+  cursor: pointer;
+}
+#f-submit:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink-black);
+}
+#f-submit:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.pair-msg {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 1.2em;
+}
+.pair-msg.ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.pair-msg.err {
+  color: var(--err);
+  font-weight: 600;
+}
+.pair-hint {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.pair-hint b {
+  color: var(--ink);
+}

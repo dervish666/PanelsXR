@@ -15,9 +15,12 @@
   "scripts": {
     "dev": "vite --host",
     "dev:quest": "HTTPS=true vite --host",
+    "dev:worker": "npm run build:worker && wrangler dev",
     "build": "tsc --noEmit && vite build",
+    "build:worker": "tsc --noEmit && tsc -p worker/tsconfig.json --noEmit && VITE_BYO=1 vite build",
+    "deploy": "npm run build:worker && wrangler deploy",
     "preview": "vite preview --host",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -33,6 +36,7 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260712.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.185.0",
@@ -40,6 +44,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.6",
+    "wrangler": "^4.110.0"
   }
 }

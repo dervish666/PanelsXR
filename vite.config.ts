@@ -19,6 +19,23 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), ...(useHttps ? [basicSsl()] : [])],
+    // VITE_BYO is baked in for the Cloudflare Worker build only (`VITE_BYO=1 vite
+    // build`) — it gates the bring-your-own-server setup/pairing flow so the
+    // Docker/Caddy container build behaves exactly as before. Defined explicitly
+    // so a build-time env var (not just a .env file) flows through to the client.
+    define: {
+      'import.meta.env.VITE_BYO': JSON.stringify(process.env.VITE_BYO ?? ''),
+    },
+    // Two entry points: the app (index.html) and the lightweight phone pairing
+    // page (pair.html) — the latter carries none of the three.js reader bundle.
+    build: {
+      rollupOptions: {
+        input: {
+          main: new URL('./index.html', import.meta.url).pathname,
+          pair: new URL('./pair.html', import.meta.url).pathname,
+        },
+      },
+    },
     // Smoke tests guard the pure, headset-independent logic (Komga URL 1-indexing,
     // .cbz page ordering). The on-device r3f/XR behaviour (material-recompile keying,
     // grab-Handle siblings, pose-drag) can't be unit-tested — it's guarded by CLAUDE.md
@@ -26,7 +43,7 @@ export default defineConfig(({ mode }) => {
     // (tsc --noEmit) remains the type/compile gate.
     test: {
       environment: 'node',
-      include: ['src/**/*.test.ts'],
+      include: ['src/**/*.test.ts', 'worker/**/*.test.ts'],
     },
     resolve: {
       // Force a single copy of three. drei's stats-gl and the xr emulator (@iwer/*)

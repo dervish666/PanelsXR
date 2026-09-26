@@ -57,6 +57,44 @@ docker run -d --name panel -p 8677:80 \
 Full guide, env reference, and an **Unraid Community Applications** template:
 [`deploy/unraid/`](deploy/unraid/).
 
+## Hosting it for others (Cloudflare Worker, bring-your-own-Komga)
+
+The container is single-tenant — one deploy, one Komga, your key in its env. The
+**Cloudflare Worker** target is the opposite: **one deployment that anyone can
+use with their own server.** The same Worker serves the app and proxies `/komga/*`
+to each visitor's own Komga; their server URL + API key live in a first-party
+cookie **on their device**, never in a database. No accounts, no login screen, and
+nothing for you to maintain per user.
+
+```bash
+wrangler login
+wrangler kv namespace create PANEL_PAIR   # paste the id into wrangler.jsonc
+npm run deploy                            # builds (VITE_BYO=1) + wrangler deploy
+```
+
+First run on a headset uses a **phone pairing** handoff so nobody types an API key
+on the Quest keyboard: the headset shows a short code, the user finishes at
+`/pair` on their phone, and the config lands on the headset (brokered through a
+single-use, 5-minute KV slot). A manual-entry path is there for keyboard devices.
+
+**Know the trade-offs:**
+
+1. **Internet-reachable Komga only.** A CF edge Worker can't route to a `192.168.x`
+   LAN box — that's what the Docker container is for. Public hostname / Cloudflare
+   Tunnel over HTTPS works (e.g. `komga.example.com`).
+2. **The key transits the Worker** (encrypted, never stored) — inherent to any
+   proxy. If you need the key to *never* leave the device, that's a different
+   (client-direct) design with its own costs; this one optimises for zero setup.
+3. **It's a public proxy**, so the Worker enforces a **read-only allowlist**
+   (`worker/guard.ts`) and refuses private/loopback upstreams. Consider adding
+   Cloudflare rate-limiting rules if you expect real traffic.
+
+Local end-to-end test (real Worker in workerd, IWER emulator on `localhost`):
+
+```bash
+npm run dev:worker   # build + wrangler dev on http://localhost:8787
+```
+
 ## Development
 
 ```bash
@@ -76,7 +114,8 @@ connection in `.env.local` (copy `.env.example`); the dev server proxies
 
 Vite + React 19 + TypeScript · three.js · @react-three/fiber · @react-three/xr v6
 (`createXRStore`, controller/hand input state) · @react-three/handle · drei ·
-JSZip (dev-only `.cbz`). Container: multi-stage build → Caddy. Node 22.
+JSZip (dev-only `.cbz`). Deploy: single Docker container (multi-stage → Caddy) or
+a Cloudflare Worker (static assets + `/komga` proxy, bring-your-own-Komga). Node 22.
 
 ## License
 

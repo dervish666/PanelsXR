@@ -1,0 +1,32 @@
+{
+  // Panel — Cloudflare Worker deploy target (the hosted, bring-your-own-Komga
+  // path). One Worker serves the built WebXR app AND proxies /komga/* to each
+  // user's own server. See worker/index.ts. The Docker/Caddy container stays for
+  // LAN-only setups — an edge Worker can't reach a 192.168.x box.
+  //
+  // First-time setup before `npm run deploy`:
+  //   1. wrangler login
+  //   2. wrangler kv namespace create PANEL_PAIR
+  //   3. paste the returned id into kv_namespaces[0].id below
+  // (Local `npm run dev:worker` simulates KV, so the placeholder id is fine there.)
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "panelsxr",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./dist/",
+    "binding": "ASSETS",
+    // Only these paths run the Worker first; /assets/* and the rest are served
+    // straight from static assets (fast, no Worker invocation).
+    "run_worker_first": ["/komga/*", "/api/pair/*"],
+    // Unknown routes fall back to index.html so client-side routing works.
+    "not_found_handling": "single-page-application"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "PANEL_PAIR",
+      // Replace with the id from `wrangler kv namespace create PANEL_PAIR`.
+      "id": "00000000000000000000000000000000"
+    }
+  ]
+}

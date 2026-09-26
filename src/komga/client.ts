@@ -64,6 +64,13 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// Cheap connectivity + credential check for the BYO setup flow: fetch a single
+// series page. Throws a KomgaError with a human message on failure (401 → "check
+// the API key", 0 → "couldn't reach Komga"), which the setup screen shows as-is.
+export async function ping(): Promise<void> {
+  await request('/series?size=1', { headers: { Accept: 'application/json' } })
+}
+
 export async function listSeries(): Promise<KomgaSeries[]> {
   // size=500 gives headroom over the ~189 series today; Komga returns all in
   // one page (no client-side paging needed — the sphere paginates the display).

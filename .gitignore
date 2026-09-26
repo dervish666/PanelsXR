@@ -7,6 +7,10 @@ dist-ssr
 .DS_Store
 *.log
 
+# Cloudflare Worker (wrangler) local state + secrets
+.wrangler/
+.dev.vars
+
 # Local tool caches
 .impeccable/
 .recall/

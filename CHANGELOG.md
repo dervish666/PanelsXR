@@ -6,9 +6,30 @@ All notable changes to Panel are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **Hosted "bring your own Komga" deploy target — a Cloudflare Worker.** One
+  Worker serves the app and proxies `/komga/*` to _each user's own_ Komga, so a
+  single deployment lets anyone read their own library with no per-user config on
+  the host and no accounts. Each user's server URL + API key live in a first-party
+  cookie on their own device (never a database); the Worker reads it per request
+  and injects the `X-API-Key` server-side, keeping every request same-origin (the
+  property the reader relies on for crisp `<img>`/texture pages). Complements the
+  Docker container, which stays for LAN-only Komga (an edge Worker can't reach a
+  `192.168.x` box). `npm run deploy` (`wrangler`); see the README.
+- **Phone pairing handoff, so nobody types an API key on the Quest keyboard.** The
+  headset shows a short code and polls; the user finishes at `/pair` on their
+  phone/laptop. Config is brokered through a single-use, ~5-minute Cloudflare KV
+  slot (no persistent storage). A manual-entry path is tucked under it for
+  keyboard devices.
+- **Read-only proxy guard + SSRF protection in the Worker** (`worker/guard.ts`,
+  unit-tested): the same method/path allowlist as the Caddyfile (GET reads, POST
+  `books/list`, PATCH `read-progress` only; account/oauth/claim refused), plus
+  rejection of private/loopback/link-local upstreams so the public proxy can't be
+  turned into a relay into internal networks.
+
 _Parked / on the roadmap: per-user Komga login (cookie-passthrough), built-in
 HTTPS (`PANEL_DOMAIN` real-cert / `PANEL_TLS=internal`), forward-auth mode for
-Authelia/Authentik, and a public "bring-your-own-Komga" static build._
+Authelia/Authentik, and Worker-side rate-limiting on the pairing endpoints._
 
 _On-device follow-ups (emulator can't verify): off-thread page decode, keeping
 the page surface mounted across the VR toggle, and abortable cover loads._
