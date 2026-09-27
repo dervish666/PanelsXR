@@ -11,7 +11,8 @@
 // order for free: tiers top to bottom, panels left to right within a tier.
 //
 // It returns [] whenever it isn't confident: one region (splash or full-bleed
-// art), more than MAX_PANELS (noise), or panels covering too little of the page.
+// art), more than MAX_PANELS (noise), panels covering too little of the page,
+// or one panel filling most of it (a merge the lens would barely lift).
 // The reader then shows the whole page exactly as it does today. There is
 // deliberately no tile/quarter fallback.
 
@@ -75,6 +76,9 @@ const BORDER_FRAC = 0.02
 // Relative to the ink extent because a newspaper-strip collection floats two
 // small strips on a mostly white page (Calvin and Hobbes: 27% of the page).
 const MIN_COVERAGE = 0.35
+// One panel larger than this share of the ink extent means a merge swallowed
+// the page (Blacksad p15): lifting it barely moves, so show the full page.
+const MAX_PANEL_SHARE = 0.8
 // Recursion guard; real pages cut 2 to 4 levels deep.
 const MAX_DEPTH = 10
 export const MAX_PANELS = 12
@@ -316,8 +320,11 @@ export function detectPanels(img: ScanImage): PanelRect[] {
   if (!extent) return []
   xyCut(c, extent, 'y', 0)
   if (leaves.length < 2 || leaves.length > MAX_PANELS) return []
-  const area = leaves.reduce((s, r) => s + (r.x1 - r.x0) * (r.y1 - r.y0), 0)
-  if (area / ((extent.x1 - extent.x0) * (extent.y1 - extent.y0)) < MIN_COVERAGE) return []
+  const areaOf = (r: Region) => (r.x1 - r.x0) * (r.y1 - r.y0)
+  const extentArea = areaOf(extent)
+  const area = leaves.reduce((s, r) => s + areaOf(r), 0)
+  if (area / extentArea < MIN_COVERAGE) return []
+  if (leaves.some((r) => areaOf(r) / extentArea > MAX_PANEL_SHARE)) return []
   return leaves.map((r) => ({
     x: r.x0 / img.width,
     y: r.y0 / img.height,

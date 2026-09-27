@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pairStart, visiblePages, nextIndex, prevIndex } from './pairing'
+import { pairStart, visiblePages, nextIndex, prevIndex, panelSlots, resolveSlot, stepSlot } from './pairing'
 
 // Cover alone, then pairs 2-3, 4-5, … (0-indexed [0], [1,2], [3,4]).
 describe('pairStart', () => {
@@ -72,5 +72,40 @@ describe('prevIndex', () => {
   })
   it('never goes negative', () => {
     expect(prevIndex(0, true)).toBe(0)
+  })
+})
+
+describe('panel slots', () => {
+  const counts: Record<number, number> = { 0: 0, 1: 3, 2: 2, 3: 0 }
+  const countOf = (p: number) => counts[p] ?? 0
+
+  it('lists one slot per panel, or a whole-page slot when none were found', () => {
+    expect(panelSlots([1], countOf)).toEqual([
+      { page: 1, panel: 0 },
+      { page: 1, panel: 1 },
+      { page: 1, panel: 2 },
+    ])
+    expect(panelSlots([0], countOf)).toEqual([{ page: 0, panel: null }])
+  })
+
+  it('orders a spread left page then right page', () => {
+    expect(panelSlots([1, 2], countOf).map((s) => `${s.page}:${s.panel}`)).toEqual([
+      '1:0', '1:1', '1:2', '2:0', '2:1',
+    ])
+    expect(panelSlots([2, 3], countOf).map((s) => `${s.page}:${s.panel}`)).toEqual(['2:0', '2:1', '3:null'])
+  })
+
+  it('resolves -1 to the last slot and clamps a stale index', () => {
+    expect(resolveSlot(-1, 3)).toBe(2)
+    expect(resolveSlot(5, 3)).toBe(2)
+    expect(resolveSlot(1, 3)).toBe(1)
+    expect(resolveSlot(-1, 0)).toBe(0)
+  })
+
+  it('steps within the slots and spills into a page turn at either end', () => {
+    expect(stepSlot(0, 3, 1)).toEqual({ idx: 1 })
+    expect(stepSlot(2, 3, 1)).toEqual({ turn: 1 })
+    expect(stepSlot(0, 3, -1)).toEqual({ turn: -1 })
+    expect(stepSlot(0, 1, 1)).toEqual({ turn: 1 }) // a whole-page slot turns straight away
   })
 })

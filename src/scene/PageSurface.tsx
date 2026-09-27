@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
 import * as THREE from 'three'
+import { detectPanels, scanImage } from '../pages/panels'
+import type { PanelRect, ScanImage } from '../pages/panels'
+import type { PanelSlot } from '../pages/pairing'
 
 // Keep the visible pages plus this many neighbours resident; dispose the rest.
 // Quest RAM is finite and full-res comic pages are large.
@@ -103,17 +106,18 @@ export interface PageAmbience {
 
 // Dominant CHROMATIC colour, not the mean: comic pages are mostly white paper
 // and black ink, so a plain average is always murky grey-brown. Instead we
-// downsample, discard paper/ink/near-grey pixels, bucket the rest by hue
-// (weighted by saturation), and take the winning bucket's average — a red-wash
-// page reads as red. The result is pinned to a fixed dark-but-saturated level
-// so the room visibly shifts page to page while staying headset-dim.
-function makeAmbience(img: HTMLImageElement): PageAmbience {
-  const c = document.createElement('canvas')
-  c.width = 32
-  c.height = 44
-  const ctx = c.getContext('2d')!
-  ctx.drawImage(img, 0, 0, c.width, c.height)
-  const data = ctx.getImageData(0, 0, c.width, c.height).data
+// sample the page's scan buffer (the same one the panel detector reads, so the
+// image is drawn to a canvas once), discard paper/ink/near-grey pixels, bucket
+// the rest by hue (weighted by saturation), and take the winning bucket's
+// average — a red-wash page reads as red. The result is pinned to a fixed
+// dark-but-saturated level so the room visibly shifts page to page while
+// staying headset-dim.
+function makeAmbience(scan: ScanImage): PageAmbience {
+  // stride down to roughly the 32x44 grid the original canvas sample used
+  const stride = Math.max(1, Math.round(Math.max(scan.width, scan.height) / 44))
+  const data = scan.data
+  const rowStep = scan.width * 4 * stride
+  const colStep = 4 * stride
 
   const BUCKETS = 12
   const wSum = new Array(BUCKETS).fill(0)
@@ -123,26 +127,30 @@ function makeAmbience(img: HTMLImageElement): PageAmbience {
   let meanR = 0
   let meanG = 0
   let meanB = 0
-  const n = data.length / 4
+  let n = 0
   const hsl = { h: 0, s: 0, l: 0 }
   const px = new THREE.Color()
 
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i] / 255
-    const g = data[i + 1] / 255
-    const b = data[i + 2] / 255
-    meanR += r
-    meanG += g
-    meanB += b
-    px.setRGB(r, g, b).getHSL(hsl)
-    // skip paper (bright), ink (dark) and near-greys — they aren't "the colour"
-    if (hsl.l > 0.88 || hsl.l < 0.07 || hsl.s < 0.18) continue
-    const k = Math.min(BUCKETS - 1, Math.floor(hsl.h * BUCKETS))
-    const w = hsl.s * (1 - Math.abs(hsl.l - 0.5)) // saturated mid-tones count most
-    wSum[k] += w
-    rSum[k] += r * w
-    gSum[k] += g * w
-    bSum[k] += b * w
+  for (let row = 0; row < data.length; row += rowStep) {
+    const end = row + scan.width * 4
+    for (let i = row; i < end; i += colStep) {
+      const r = data[i] / 255
+      const g = data[i + 1] / 255
+      const b = data[i + 2] / 255
+      meanR += r
+      meanG += g
+      meanB += b
+      n++
+      px.setRGB(r, g, b).getHSL(hsl)
+      // skip paper (bright), ink (dark) and near-greys — they aren't "the colour"
+      if (hsl.l > 0.88 || hsl.l < 0.07 || hsl.s < 0.18) continue
+      const k = Math.min(BUCKETS - 1, Math.floor(hsl.h * BUCKETS))
+      const w = hsl.s * (1 - Math.abs(hsl.l - 0.5)) // saturated mid-tones count most
+      wSum[k] += w
+      rSum[k] += r * w
+      gSum[k] += g * w
+      bSum[k] += b * w
+    }
   }
 
   const best = wSum.indexOf(Math.max(...wSum))
@@ -154,9 +162,40 @@ function makeAmbience(img: HTMLImageElement): PageAmbience {
     color.setHSL(hsl.h, Math.min(hsl.s * 1.4, 0.8), 0.11)
   } else {
     // effectively monochrome page: fall back to a very dim mean
-    color.setRGB(meanR / n, meanG / n, meanB / n).multiplyScalar(0.14)
+    color.setRGB(meanR / Math.max(1, n), meanG / Math.max(1, n), meanB / Math.max(1, n)).multiplyScalar(0.14)
   }
   return { color }
+}
+
+// Per-page derived data, computed once from a single canvas draw of the decoded
+// image and cached beside the texture (evicted with it).
+interface PageMeta {
+  rects: PanelRect[] // [] = the detector wasn't confident: show the whole page
+  ambience: PageAmbience
+}
+
+// Warn (once per session) when a page's detect runs long: the cut is meant to
+// be a few ms, and a silent hitch on every page load is the kind of thing only
+// the headset would otherwise reveal. The scan (canvas draw + readback) is
+// timed apart from the cut because its first draw of an <img> also decodes it
+// (100-400ms for a big page); that decode is paid once either way, since the
+// GPU upload needs it too, so only the cut is held to the budget.
+const SLOW_DETECT_MS = 16
+let warnedSlow = false
+
+function makeMeta(img: HTMLImageElement, url: string): PageMeta {
+  const t0 = performance.now()
+  const scan = scanImage(img)
+  const t1 = performance.now()
+  const rects = detectPanels(scan)
+  const cutMs = performance.now() - t1
+  if (cutMs > SLOW_DETECT_MS && !warnedSlow) {
+    warnedSlow = true
+    console.warn(
+      `[Panel] panel cut took ${cutMs.toFixed(1)}ms (scan ${(t1 - t0).toFixed(1)}ms, ${img.width}×${img.height}) for ${url}`,
+    )
+  }
+  return { rects, ambience: makeAmbience(scan) }
 }
 
 export interface PageSurfaceProps {
@@ -165,6 +204,78 @@ export interface PageSurfaceProps {
   curve?: number // 0 = flat, 1 = full bend toward the viewer at the edges
   onAmbience?: (a: PageAmbience) => void
   onLayout?: (width: number, height: number) => void // actual page bounds, for the tap zones
+  // Panel mode: the slot to focus. A slot with panel: null (or a page whose
+  // rects aren't known yet) shows the whole page, no lens, no dim.
+  focus?: PanelSlot | null
+  onPanels?: (page: number, count: number) => void // detected panel count per page
+}
+
+// ---- the lens -------------------------------------------------------------
+
+const LENS_LIFT = 0.25 // metres in front of the page
+const LENS_FILL = 0.85 // the panel's long edge as a fraction of PAGE_HEIGHT
+const LENS_MAX_SCALE = 4 // cap for thin strips so a sliver doesn't fill the room
+const LENS_LAMBDA = 22 // damp rate: ~180ms to settle
+const DIM = new THREE.Color('#4a4a4a')
+const BRIGHT = new THREE.Color('#ffffff')
+
+// A plane the size of the panel on the page, with UVs cropped to the panel so
+// it reads straight off the page's texture (no clone, no offset/repeat, so the
+// page behind is untouched). Rebuilt when the panel or page size changes.
+function cropPlane(pw: number, ph: number, r: PanelRect): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(pw, ph)
+  // three's PlaneGeometry UVs run (0,1) top-left → (1,0) bottom-right; the page
+  // texture has v=1 at the top (flipY), matching curvedSlice.
+  const u0 = r.x
+  const u1 = r.x + r.w
+  const v1 = 1 - r.y
+  const v0 = 1 - (r.y + r.h)
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([u0, v1, u1, v1, u0, v0, u1, v0], 2))
+  return g
+}
+
+interface PanelLensProps {
+  tex: THREE.Texture
+  rect: PanelRect
+  pageX: number // left edge of the page slice in surface space
+  pageWidth: number
+}
+
+function PanelLens({ tex, rect, pageX, pageWidth }: PanelLensProps) {
+  const ref = useRef<THREE.Mesh>(null)
+  const pw = rect.w * pageWidth
+  const ph = rect.h * PAGE_HEIGHT
+  // where the panel sits on the page: the lens animates out from here
+  const cx = pageX + (rect.x + rect.w / 2) * pageWidth
+  const cy = PAGE_HEIGHT * (0.5 - (rect.y + rect.h / 2))
+  const target = Math.min(LENS_MAX_SCALE, (LENS_FILL * PAGE_HEIGHT) / Math.max(pw, ph))
+  const geom = useMemo(() => cropPlane(pw, ph, rect), [pw, ph, rect])
+  useEffect(() => () => geom.dispose(), [geom])
+  // Start from the panel's own spot at scale 1 whenever the focus changes.
+  const key = `${tex.uuid}:${rect.x},${rect.y},${rect.w},${rect.h}`
+  const started = useRef<string | null>(null)
+  useFrame((_, dt) => {
+    const m = ref.current
+    if (!m) return
+    if (started.current !== key) {
+      started.current = key
+      m.position.set(cx, cy, 0.01)
+      m.scale.setScalar(1)
+    }
+    const d = Math.min(dt, 0.05)
+    m.position.x = THREE.MathUtils.damp(m.position.x, 0, LENS_LAMBDA, d)
+    m.position.y = THREE.MathUtils.damp(m.position.y, 0, LENS_LAMBDA, d)
+    m.position.z = THREE.MathUtils.damp(m.position.z, LENS_LIFT, LENS_LAMBDA, d)
+    const s = THREE.MathUtils.damp(m.scale.x, target, LENS_LAMBDA, d)
+    m.scale.setScalar(s)
+  })
+  return (
+    // raycast off: the lens sits in front of the tap zones and must not eat
+    // their pointer events (or the grab, which comes off the page's border)
+    <mesh ref={ref} geometry={geom} raycast={() => null} renderOrder={2}>
+      <meshBasicMaterial key={tex.uuid} map={tex} toneMapped={false} />
+    </mesh>
+  )
 }
 
 // NOTE: a WebXR quad layer (<XRLayer quality="text-optimized">) was tried here
@@ -172,11 +283,23 @@ export interface PageSurfaceProps {
 // IWER emulator only because IWER lacks layer support and silently used the
 // mesh fallback). Needs a dedicated on-device debugging session — see the
 // project note. The plain mesh below is the proven-readable path.
-export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: PageSurfaceProps) {
+export function PageSurface({
+  urls,
+  indices,
+  curve = 0,
+  onAmbience,
+  onLayout,
+  focus = null,
+  onPanels,
+}: PageSurfaceProps) {
   const { gl } = useThree()
   const maxAnisotropy = useMemo(() => gl.capabilities.getMaxAnisotropy(), [gl])
   const cache = useRef<Map<number, THREE.Texture>>(new Map())
+  const meta = useRef<Map<number, PageMeta>>(new Map())
   const cacheUrls = useRef<string[] | null>(null)
+  // Page materials, collected so the dim can lerp them each frame without
+  // re-rendering (they remount when their texture changes, hence a Set).
+  const pageMats = useRef<Set<THREE.MeshBasicMaterial>>(new Set())
   // Textures live in the cache ref; bump forces a re-render when one arrives.
   const [, bump] = useReducer((c: number) => c + 1, 0)
   // Page indices whose image failed to load, and how many times we've tried —
@@ -196,6 +319,7 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
     if (cacheUrls.current !== urls) {
       for (const tex of cache.current.values()) tex.dispose()
       cache.current.clear()
+      meta.current.clear()
       cacheUrls.current = urls
     }
 
@@ -212,6 +336,7 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
       if (!want.has(i)) {
         tex.dispose()
         cache.current.delete(i)
+        meta.current.delete(i)
       }
     }
 
@@ -226,6 +351,13 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
           }
           tex.anisotropy = maxAnisotropy
           cache.current.set(i, tex)
+          // Panel rects + ambience from one canvas draw of the decoded image.
+          // Runs here, during the neighbour preload, so a page turn never waits
+          // on it. `tex.image` is the original <img> (or the ≤2048 canvas for
+          // huge scans; the detector is scale-independent).
+          const m = makeMeta(tex.image as HTMLImageElement, urls[i])
+          meta.current.set(i, m)
+          onPanels?.(i, m.rects.length)
           failed.current.delete(i)
           attempts.current.delete(i)
           bump()
@@ -253,26 +385,48 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
     return () => {
       cancelled = true
     }
+    // onPanels is a stable callback from App; not a reason to reload pages
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indices, urls, maxAnisotropy, retryNonce])
 
   // Emit the room ambience for the first visible page once it's resident.
   const ambienceFor = useRef<string | null>(null)
   useEffect(() => {
     if (!onAmbience) return
-    const tex = cache.current.get(indices[0])
-    const img = tex?.image as HTMLImageElement | undefined
+    const m = meta.current.get(indices[0])
     const key = urls[indices[0]]
-    if (!img || ambienceFor.current === key) return
+    if (!m || ambienceFor.current === key) return
     ambienceFor.current = key
-    onAmbience(makeAmbience(img))
+    onAmbience(m.ambience)
+  })
+
+  // The focused panel, if its page is resident and the detector found panels.
+  const lens = (() => {
+    if (!focus || focus.panel === null) return null
+    const tex = cache.current.get(focus.page)
+    const rect = meta.current.get(focus.page)?.rects[focus.panel]
+    return tex && rect ? { tex, rect, page: focus.page } : null
+  })()
+
+  // Dim the page while a lens is up. Lerped per frame on the live materials so
+  // no re-render (and no shader recompile) is involved.
+  useFrame((_, dt) => {
+    const target = lens ? DIM : BRIGHT
+    const k = 1 - Math.exp(-LENS_LAMBDA * Math.min(dt, 0.05))
+    for (const mat of pageMats.current) {
+      if (!mat.map) continue // the placeholder tint stays as it is
+      mat.color.lerp(target, k)
+    }
   })
 
   // Dispose everything when the surface unmounts.
   useEffect(() => {
     const c = cache.current
+    const m = meta.current
     return () => {
       for (const tex of c.values()) tex.dispose()
       c.clear()
+      m.clear()
     }
   }, [])
 
@@ -293,11 +447,13 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
   // load), and disposed to keep Quest VRAM honest.
   const widthKey = pages.map((p) => p.width.toFixed(3)).join(',')
   const geomRef = useRef<THREE.BufferGeometry[]>([])
-  const { pageGeoms, boardGeom } = useMemo(() => {
+  const { pageGeoms, boardGeom, pageX } = useMemo(() => {
     geomRef.current.forEach((g) => g.dispose())
     const radius = curve > 0.001 ? totalWidth / (curve * PHI_MAX) : null
     let x = -totalWidth / 2
+    const pageX: number[] = []
     const pageGeoms = pages.map((p) => {
+      pageX.push(x)
       const g = curvedSlice(x, x + p.width, PAGE_HEIGHT, radius)
       x += p.width + SPREAD_GAP
       return g
@@ -305,7 +461,7 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
     const bw = totalWidth + 0.06
     const boardGeom = curvedSlice(-bw / 2, bw / 2, PAGE_HEIGHT + 0.06, radius)
     geomRef.current = [...pageGeoms, boardGeom]
-    return { pageGeoms, boardGeom }
+    return { pageGeoms, boardGeom, pageX }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widthKey, curve])
   useEffect(() => () => geomRef.current.forEach((g) => g.dispose()), [])
@@ -346,6 +502,13 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
               renders flat white. */}
           <meshBasicMaterial
             key={p.tex ? p.tex.uuid : 'placeholder'}
+            ref={(mat) => {
+              if (!mat) return
+              pageMats.current.add(mat)
+              return () => {
+                pageMats.current.delete(mat)
+              }
+            }}
             map={p.tex}
             color={p.tex ? '#ffffff' : '#1a1a22'}
             toneMapped={false}
@@ -353,6 +516,14 @@ export function PageSurface({ urls, indices, curve = 0, onAmbience, onLayout }: 
           />
         </mesh>
       ))}
+      {lens && (
+        <PanelLens
+          tex={lens.tex}
+          rect={lens.rect}
+          pageX={pageX[pages.findIndex((p) => p.i === lens.page)] ?? -totalWidth / 2}
+          pageWidth={pages.find((p) => p.i === lens.page)?.width ?? totalWidth}
+        />
+      )}
       {/* A failed page would otherwise be an unexplained dark plane in-headset
           (the console is invisible there). Say so, and note it's auto-retrying. */}
       {pages.some((p) => !p.tex && failed.current.has(p.i)) && (

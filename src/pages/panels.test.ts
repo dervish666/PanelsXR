@@ -112,6 +112,13 @@ describe('detectPanels', () => {
     expect(detectPanels(img)).toEqual([])
   })
 
+  it('returns [] when one panel fills most of the page (a merge the lens would barely lift)', () => {
+    const img = page(200, 300, WHITE)
+    fill(img, 10, 10, 180, 230, ART) // 83% of the ink extent
+    fill(img, 10, 246, 180, 40, ART)
+    expect(detectPanels(img)).toEqual([])
+  })
+
   it('returns [] for a blank page', () => {
     expect(detectPanels(page(200, 300, WHITE))).toEqual([])
   })
