@@ -13,10 +13,7 @@ Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 _On-device follow-ups (emulator can't verify): off-thread page decode, keeping
 the page surface mounted across the VR toggle, and abortable cover loads._
 
-## [0.3.0-rc.1] — 2026-09-27
-
-Release candidate for on-headset testing. Published as `:v0.3.0-rc.1` only;
-`:latest` stays on 0.2.3 until this is confirmed on the Quest.
+## [0.3.0] — 2026-09-27
 
 ### Added
 - **Panel mode: read a page one panel at a time without moving.** Each page is
