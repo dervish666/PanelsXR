@@ -13,6 +13,31 @@ Authelia/Authentik, and a public "bring-your-own-Komga" static build._
 _On-device follow-ups (emulator can't verify): off-thread page decode, keeping
 the page surface mounted across the VR toggle, and abortable cover loads._
 
+## [0.3.0-rc.1] — 2026-09-27
+
+Release candidate for on-headset testing. Published as `:v0.3.0-rc.1` only;
+`:latest` stays on 0.2.3 until this is confirmed on the Quest.
+
+### Added
+- **Panel mode: read a page one panel at a time without moving.** Each page is
+  scanned for the gutters between panels as it loads. In panel mode the current
+  panel lifts forward, enlarged, while the rest of the page dims. A steps to the
+  next panel and rolls onto the next page; B goes back. The right stick still
+  turns whole pages. Toggle with a right-thumbstick click, the Panels button on
+  the VR tray, the toolbar button, or P on desktop (arrow keys step panels).
+  Works in two-page spreads (left page's panels, then the right's). The choice
+  is remembered per device.
+- **Pages it can't split show full page, as before.** Covers, splashes,
+  full-bleed art and any page where one detected panel fills most of it count as
+  a single step. There is deliberately no guessed quarter-page fallback.
+- **`?panels=debug` sweep overlay** (desktop) draws the detected panels over
+  each page with per-page timings and a running hit rate, for checking a book.
+
+### Known limits
+- Speech balloons or sound effects that cross a gutter merge the two panels
+  either side into one.
+- Reading order is left to right only; manga (right to left) isn't handled yet.
+
 ## [0.2.3] — 2026-07-12
 
 ### Fixed
