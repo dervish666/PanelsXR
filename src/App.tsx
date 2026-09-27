@@ -10,6 +10,7 @@ import { loadCbz } from './pages/cbz'
 import { visiblePages, nextIndex, prevIndex } from './pages/pairing'
 import { storageGet, storageSet, storageRemove } from './storage'
 import { Library } from './ui/Library'
+import { PanelDebug, isPanelDebug } from './ui/PanelDebug'
 import { bookPageUrls, bookThumbUrl, getBook, saveProgress, KomgaError } from './komga/client'
 import type { KomgaBook } from './komga/types'
 
@@ -244,6 +245,7 @@ export function App() {
   )
 
   const hasComic = pages.length > 0
+  const panelDebug = useMemo(isPanelDebug, [])
 
   const enterVR = useCallback(async () => {
     setChrome('hud')
@@ -426,6 +428,9 @@ export function App() {
       {showLibrary && (
         <Library onOpenBook={(b) => openBook(b)} onClose={() => setShowLibrary(false)} />
       )}
+
+      {/* Dev sweep for the panel detector; only with ?panels=debug in the URL. */}
+      {panelDebug && hasComic && <PanelDebug urls={pages} indices={visible} />}
 
       <Canvas camera={{ position: [0, 1.4, 0.35], fov: 60 }} gl={{ antialias: true }}>
         <XR store={xrStore}>

@@ -713,3 +713,23 @@ canvas { display: block; touch-action: none; }
   }
   .card:hover, .card:active, .btn:hover, .btn:active, .burst:hover, .burst:active { transform: none; }
 }
+
+/* Panel-detector sweep overlay (dev only, ?panels=debug). Flat page copies with
+   the detected rects drawn on, pinned bottom-right over the 3D view. */
+.panel-debug {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  padding: 8px;
+  background: var(--surface, oklch(18% 0.01 25));
+  border: 2px solid var(--ink-black);
+  box-shadow: 4px 4px 0 var(--ink-black);
+  color: var(--ink);
+  font: 12px/1.3 system-ui, sans-serif;
+  pointer-events: none;
+}
+.panel-debug-head { margin-bottom: 6px; color: var(--muted); }
+.panel-debug-row { display: flex; gap: 8px; }
+.panel-debug-page canvas { display: block; background: #000; }
+.panel-debug-meta { margin-top: 4px; }
