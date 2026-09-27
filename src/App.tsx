@@ -7,9 +7,10 @@ import { Reader } from './scene/Reader'
 import { LibrarySphere } from './scene/LibrarySphere'
 import { VRViewToggle } from './scene/VRViewToggle'
 import { loadCbz } from './pages/cbz'
-import { visiblePages, nextIndex, prevIndex } from './pages/pairing'
+import { visiblePages, nextIndex, prevIndex, panelSlots, resolveSlot, stepSlot } from './pages/pairing'
 import { storageGet, storageSet, storageRemove } from './storage'
 import { Library } from './ui/Library'
+import { PanelDebug, isPanelDebug } from './ui/PanelDebug'
 import { bookPageUrls, bookThumbUrl, getBook, saveProgress, KomgaError } from './komga/client'
 import type { KomgaBook } from './komga/types'
 
@@ -17,6 +18,7 @@ const LAST_BOOK_KEY = 'panel.lastBookId'
 const SPREAD_KEY = 'panel.spread'
 const CURVE_KEY = 'panel.curve'
 const HANDS_KEY = 'panel.handGestures'
+const PANELS_KEY = 'panel.panels'
 
 export function App() {
   // No comic until one is opened (resume / library / .cbz) — the landing must
@@ -74,14 +76,59 @@ export function App() {
     [spread, index, pages.length],
   )
 
+  // Panel ("exploded") mode: A/B and the arrow keys step through the detected
+  // panels of the visible pages; whole-page turns (stick, toolbar) reset the
+  // position to the first slot. Counts arrive per page from PageSurface as it
+  // decodes; a page with 0 counts is a single whole-page slot.
+  const [panelMode, setPanelMode] = useState(() => storageGet(PANELS_KEY) === '1')
+  const [panelIdx, setPanelIdx] = useState(0) // -1 = last slot (stepping back)
+  const [panelCounts, setPanelCounts] = useState<Record<number, number>>({})
+  const onPanels = useCallback((page: number, count: number) => {
+    setPanelCounts((m) => (m[page] === count ? m : { ...m, [page]: count }))
+  }, [])
+  const togglePanels = useCallback(
+    () =>
+      setPanelMode((v) => {
+        storageSet(PANELS_KEY, v ? '0' : '1')
+        return !v
+      }),
+    [],
+  )
+
   const next = useCallback(() => {
     interacted.current = true
     setIndex((i) => nextIndex(i, pages.length, spread))
+    setPanelIdx(0)
   }, [pages.length, spread])
   const prev = useCallback(() => {
     interacted.current = true
     setIndex((i) => prevIndex(i, spread))
+    setPanelIdx(0)
   }, [spread])
+
+  const slots = useMemo(
+    () => panelSlots(visible, (p) => panelCounts[p] ?? 0),
+    [visible, panelCounts],
+  )
+  const slotIdx = resolveSlot(panelIdx, slots.length)
+  const focus = slots[slotIdx] ?? null
+
+  // One A press: the next panel, or the next page's first panel at the end.
+  const stepNext = useCallback(() => {
+    if (!panelMode) return next()
+    const r = stepSlot(slotIdx, slots.length, 1)
+    if ('idx' in r) setPanelIdx(r.idx)
+    else if (index < pages.length - 1) next()
+  }, [panelMode, slotIdx, slots.length, index, pages.length, next])
+  const stepPrev = useCallback(() => {
+    if (!panelMode) return prev()
+    const r = stepSlot(slotIdx, slots.length, -1)
+    if ('idx' in r) setPanelIdx(r.idx)
+    else if (index > 0) {
+      prev()
+      setPanelIdx(-1) // land on the previous page's last panel (after prev's reset)
+    }
+  }, [panelMode, slotIdx, slots.length, index, prev])
 
   // Open a Komga book: pages stream straight from the server through the dev
   // proxy, and we resume at the server-side read progress (iPad → headset).
@@ -95,6 +142,8 @@ export function App() {
     })
     const rp = b.readProgress
     setIndex(rp && !rp.completed ? Math.min(rp.page - 1, urls.length - 1) : 0)
+    setPanelIdx(0)
+    setPanelCounts({})
     interacted.current = false // opening a book is not a page turn — don't sync
     // A deliberate open (from the library/marquee, collapseChrome=true) means the
     // user chose this; a late startup-resume must not overwrite it.
@@ -177,9 +226,10 @@ export function App() {
     }
   }, [book])
 
-  // Desktop fallback: arrow keys / space turn pages. Only when a comic is open,
-  // and never while typing — otherwise Space in the Library search box turns the
-  // page instead of inserting a space, and arrows are stolen from any control.
+  // Desktop fallback: arrow keys / space turn pages (or step panels in panel
+  // mode; P toggles it). Only when a comic is open, and never while typing —
+  // otherwise Space in the Library search box turns the page instead of
+  // inserting a space, and arrows are stolen from any control.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -188,16 +238,18 @@ export function App() {
       if (['ArrowRight', 'ArrowDown', ' '].includes(e.key)) {
         e.preventDefault()
         setChrome('hud')
-        next()
+        stepNext()
       } else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) {
         e.preventDefault()
         setChrome('hud')
-        prev()
+        stepPrev()
+      } else if (e.key === 'p' || e.key === 'P') {
+        togglePanels()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [next, prev, pages.length])
+  }, [stepNext, stepPrev, togglePanels, pages.length])
 
   const onPickCbz = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -211,6 +263,8 @@ export function App() {
         return urls
       })
       setIndex(0)
+      setPanelIdx(0)
+      setPanelCounts({})
       setBook(null)
       interacted.current = false
       userOpened.current = true // don't let a late startup-resume clobber the .cbz
@@ -244,6 +298,7 @@ export function App() {
   )
 
   const hasComic = pages.length > 0
+  const panelDebug = useMemo(isPanelDebug, [])
 
   const enterVR = useCallback(async () => {
     setChrome('hud')
@@ -387,6 +442,13 @@ export function App() {
               <span className="curve-val">{Math.round(curve * 100)}%</span>
             </label>
             <button
+              className={`btn-ghost sm${panelMode ? ' on' : ''}`}
+              onClick={togglePanels}
+              title="Panel mode: A/B (or the arrow keys) step through the page's panels, each lifted in front of the page; the right stick still turns whole pages. Right stick click toggles it in VR."
+            >
+              Panels {panelMode ? 'on' : 'off'}
+            </button>
+            <button
               className={`btn-ghost sm${handGestures ? ' on' : ''}`}
               onClick={toggleHands}
               title="Hand mode (Quest hand tracking): turn pages by tapping the page's left/right thirds or waving a hand; middle taps show/hide the controls. Off = controller mode (trigger-hold to grab the page, A/B to page)."
@@ -417,8 +479,8 @@ export function App() {
           )}
           {error && <div className="error">{error}</div>}
           <div className="hint">
-            Turn: right stick / ← → · Grab: trigger (two to resize) · Walk: left stick · X
-            recenters · Y opens the 3D library
+            Turn: right stick / ← → · Panels: A/B step, stick click toggles · Grab: trigger
+            (two to resize) · Walk: left stick · X recenters · Y opens the 3D library
           </div>
         </div>
       )}
@@ -426,6 +488,9 @@ export function App() {
       {showLibrary && (
         <Library onOpenBook={(b) => openBook(b)} onClose={() => setShowLibrary(false)} />
       )}
+
+      {/* Dev sweep for the panel detector; only with ?panels=debug in the URL. */}
+      {panelDebug && hasComic && <PanelDebug urls={pages} indices={visible} />}
 
       <Canvas camera={{ position: [0, 1.4, 0.35], fov: 60 }} gl={{ antialias: true }}>
         <XR store={xrStore}>
@@ -455,6 +520,12 @@ export function App() {
               curve={curve}
               onCurveChange={setCurve}
               handGestures={handGestures}
+              panelMode={panelMode}
+              onTogglePanels={togglePanels}
+              onStepNext={stepNext}
+              onStepPrev={stepPrev}
+              focus={focus}
+              onPanels={onPanels}
             />
           ) : null}
         </XR>

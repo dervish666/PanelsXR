@@ -12,6 +12,7 @@ import * as THREE from 'three'
 import { Group, Matrix4, Vector3 } from 'three'
 import { PageSurface } from './PageSurface'
 import type { PageAmbience } from './PageSurface'
+import type { PanelSlot } from '../pages/pairing'
 import { XRPageInput } from './XRPageInput'
 import { XRHandPageInput } from './XRHandPageInput'
 import { UIButton } from './UIButton'
@@ -29,6 +30,14 @@ export interface ReaderProps {
   curve: number // 0 = flat … 1 = full bend toward the viewer
   onCurveChange: (v: number) => void
   handGestures: boolean // wave-to-turn-page (Quest hand tracking)
+  // Panel mode: A/B step through the page's panels (right stick still turns
+  // whole pages). `focus` is the slot the lens shows; null = whole page.
+  panelMode: boolean
+  onTogglePanels: () => void
+  onStepNext: () => void
+  onStepPrev: () => void
+  focus: PanelSlot | null
+  onPanels: (page: number, count: number) => void
 }
 
 // Where the page sits when you enter VR / on desktop.
@@ -275,6 +284,12 @@ export function Reader({
   curve,
   onCurveChange,
   handGestures,
+  panelMode,
+  onTogglePanels,
+  onStepNext,
+  onStepPrev,
+  focus,
+  onPanels,
 }: ReaderProps) {
   const inXR = useXR((s) => s.session != null)
   const pageRef = useRef<Group>(null)
@@ -294,6 +309,8 @@ export function Reader({
         curve={curve}
         onAmbience={setAmbience}
         onLayout={onLayout}
+        focus={panelMode ? focus : null}
+        onPanels={onPanels}
       />
     </group>
   )
@@ -330,22 +347,29 @@ export function Reader({
 
       {inXR && controlsVisible && (
         <ControlBar pageRef={pageRef}>
-          <Tray width={1.74} height={0.44} />
+          <Tray width={2.06} height={0.44} />
           {/* row 1 — paging + modes */}
-          <UIButton position={[-0.61, 0.1, 0]} width={0.24} label="‹ Prev" onClick={onPrev} />
-          <UIButton position={[-0.35, 0.1, 0]} width={0.24} label="Next ›" onClick={onNext} />
+          <UIButton position={[-0.77, 0.1, 0]} width={0.24} label="‹ Prev" onClick={onPrev} />
+          <UIButton position={[-0.51, 0.1, 0]} width={0.24} label="Next ›" onClick={onNext} />
           <UIButton
-            position={[-0.04, 0.1, 0]}
+            position={[-0.2, 0.1, 0]}
             width={0.34}
             label={spread ? 'Single' : 'Two-page'}
             onClick={onToggleSpread}
           />
-          <UIButton position={[0.29, 0.1, 0]} width={0.28} label="Library" accent onClick={onOpenLibrary} />
-          <UIButton position={[0.59, 0.1, 0]} width={0.28} label="Exit VR" onClick={exitVR} />
+          <UIButton
+            position={[0.14, 0.1, 0]}
+            width={0.3}
+            label={panelMode ? 'Panels on' : 'Panels'}
+            accent={panelMode}
+            onClick={onTogglePanels}
+          />
+          <UIButton position={[0.45, 0.1, 0]} width={0.28} label="Library" accent onClick={onOpenLibrary} />
+          <UIButton position={[0.75, 0.1, 0]} width={0.28} label="Exit VR" onClick={exitVR} />
           {/* row 2 — curve comfort slider */}
           <Text
             raycast={() => null}
-            position={[-0.68, -0.11, 0.004]}
+            position={[-0.84, -0.11, 0.004]}
             fontSize={0.045}
             anchorX="left"
             anchorY="middle"
@@ -353,10 +377,10 @@ export function Reader({
           >
             Curve
           </Text>
-          <Slider3D position={[0.04, -0.11, 0]} width={0.82} value={curve} onChange={onCurveChange} />
+          <Slider3D position={[-0.12, -0.11, 0]} width={0.82} value={curve} onChange={onCurveChange} />
           <Text
             raycast={() => null}
-            position={[0.56, -0.11, 0.004]}
+            position={[0.4, -0.11, 0.004]}
             fontSize={0.045}
             anchorX="left"
             anchorY="middle"
@@ -367,7 +391,13 @@ export function Reader({
         </ControlBar>
       )}
 
-      <XRPageInput onNext={onNext} onPrev={onPrev} />
+      <XRPageInput
+        onNext={onNext}
+        onPrev={onPrev}
+        onA={onStepNext}
+        onB={onStepPrev}
+        onStickClick={onTogglePanels}
+      />
       <XRHandPageInput onNext={onNext} onPrev={onPrev} enabled={handGestures} />
 
       {inXR ? (
